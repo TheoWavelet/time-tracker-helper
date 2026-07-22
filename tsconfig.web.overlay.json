@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "./.tsbuild/web-overlay",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
+  },
+  "include": [
+    "src/renderer/overlay/**/*",
+    "src/renderer/shared/**/*",
+    "src/shared/**/*",
+    "src/preload/overlay.ts"
+  ]
+}

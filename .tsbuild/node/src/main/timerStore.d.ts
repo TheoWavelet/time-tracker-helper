@@ -1,0 +1,13 @@
+import type { StartTimerInput, TimerDTO, TimersSnapshot } from '@shared/types';
+type Listener = (snapshot: TimersSnapshot) => void;
+export declare function onTimersChanged(listener: Listener): () => void;
+export declare function getSnapshot(): TimersSnapshot;
+export declare function startTimer(input: StartTimerInput): TimerDTO;
+export declare function pauseTimer(id: string): void;
+export declare function resumeTimer(id: string): void;
+export declare function stopTimer(id: string): void;
+export declare function submitTimer(id: string, tagLabel: string): TimerDTO;
+export declare function discardTimer(id: string): void;
+export declare function updateTimerTitle(id: string, title: string): void;
+export declare function listTags(): import("@shared/types").TagDTO[];
+export {};
