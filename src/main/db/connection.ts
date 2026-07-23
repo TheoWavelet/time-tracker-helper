@@ -3,8 +3,12 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { app } from 'electron'
 import migration0001 from './migrations/0001_init.sql?raw'
+import migration0002 from './migrations/0002_allow_idle_paused_reason.sql?raw'
 
-const MIGRATIONS: { version: number; sql: string }[] = [{ version: 1, sql: migration0001 }]
+const MIGRATIONS: { version: number; sql: string }[] = [
+  { version: 1, sql: migration0001 },
+  { version: 2, sql: migration0002 }
+]
 
 export type DrizzleDb = ReturnType<typeof drizzle>
 

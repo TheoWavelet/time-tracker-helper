@@ -12,6 +12,13 @@ body,
 * {
   box-sizing: border-box;
   font-family: 'Segoe UI', system-ui, sans-serif;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+
+/* Hide the scrollbar everywhere while keeping the element scrollable. */
+*::-webkit-scrollbar {
+  display: none;
 }
 
 .panel {
@@ -119,6 +126,21 @@ body,
 /* "Timer is on" indicator — a blueish background tint. */
 .bar-row--running {
   background: rgba(56, 189, 248, 0.2);
+}
+
+/* Flags any currently-paused timer (manual, switched, or idle) — keeps flashing until resumed/stopped. */
+.bar-row--paused-alert {
+  animation: paused-alert-flash 1.6s ease-in-out infinite;
+}
+
+@keyframes paused-alert-flash {
+  0%,
+  100% {
+    background: rgba(220, 38, 38, 0.15);
+  }
+  50% {
+    background: rgba(220, 38, 38, 0.6);
+  }
 }
 
 /* Brief glow ring on the row itself when a timer starts or pauses. */
@@ -280,6 +302,11 @@ body,
   background: rgba(56, 189, 248, 0.22);
 }
 
+/* Flags any currently-paused timer (manual, switched, or idle) — keeps flashing until resumed/stopped. */
+.timer-row--paused-alert {
+  animation: paused-alert-flash 1.6s ease-in-out infinite;
+}
+
 .timer-row.pulse-start {
   animation: row-pulse-start 0.5s ease-out;
 }
@@ -347,7 +374,6 @@ body,
 
 .tag-picker__header {
   display: flex;
-  justify-content: space-between;
   gap: 6px;
   padding: 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -379,6 +405,20 @@ body,
   overflow-y: auto;
 }
 
+.tag-picker__list + .tag-picker__list,
+.tag-picker__list + .tag-picker__header {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.tag-picker__section-label {
+  padding: 5px 8px 3px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #a1a1aa;
+}
+
 .tag-picker__row {
   display: flex;
   flex-direction: column;
@@ -396,6 +436,49 @@ body,
 
 .tag-picker__row:hover {
   background: rgba(245, 158, 11, 0.15);
+}
+
+/* Tag rows: a row-direction wrapper (label+url button, plus a separate favorite-star button). */
+.tag-picker__row--tag {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tag-picker__row--tag:hover {
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.tag-picker__row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font-size: 11px;
+}
+
+.tag-picker__favorite-btn {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.25);
+  transition: color 0.1s ease;
+}
+
+.tag-picker__favorite-btn:hover,
+.tag-picker__favorite-btn.is-favorite {
+  color: #f59e0b;
 }
 
 .tag-picker__row-url {

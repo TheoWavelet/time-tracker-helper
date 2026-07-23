@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { StartTimerInput, TagPickerEntry, TimerDTO, TimersSnapshot } from '@shared/types'
+import type {
+  AppSettings,
+  BrowserPairingInfo,
+  DomainHistoryItem,
+  OpenTabInfo,
+  StartTimerInput,
+  TagPickerEntry,
+  TimerDTO,
+  TimersSnapshot
+} from '@shared/types'
 
 const api = {
   timers: {
@@ -15,7 +24,18 @@ const api = {
     }
   },
   tags: {
-    listForPicker: (): Promise<TagPickerEntry[]> => ipcRenderer.invoke('tags:listForPicker')
+    listForPicker: (): Promise<TagPickerEntry[]> => ipcRenderer.invoke('tags:listForPicker'),
+    findOrCreateByLabelAndUrl: (label: string, url: string): Promise<TagPickerEntry> =>
+      ipcRenderer.invoke('tags:findOrCreateByLabelAndUrl', label, url),
+    toggleFavorite: (id: string): Promise<TagPickerEntry> => ipcRenderer.invoke('tags:toggleFavorite', id)
+  },
+  settings: {
+    get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
+    onChanged: (callback: (settings: AppSettings) => void): (() => void) => {
+      const listener = (_event: unknown, settings: AppSettings): void => callback(settings)
+      ipcRenderer.on('settings:changed', listener)
+      return () => ipcRenderer.removeListener('settings:changed', listener)
+    }
   },
   overlay: {
     setExpanded: (expanded: boolean): Promise<boolean> => ipcRenderer.invoke('overlay:setExpanded', expanded),
@@ -29,6 +49,12 @@ const api = {
   },
   app: {
     openDashboard: (): Promise<void> => ipcRenderer.invoke('dashboard:show')
+  },
+  browser: {
+    listOpenTabs: (): Promise<OpenTabInfo[]> => ipcRenderer.invoke('browser:listOpenTabs'),
+    searchHistoryByDomain: (): Promise<DomainHistoryItem[]> =>
+      ipcRenderer.invoke('browser:searchHistoryByDomain'),
+    getPairingInfo: (): Promise<BrowserPairingInfo> => ipcRenderer.invoke('browser:getPairingInfo')
   }
 }
 

@@ -29,7 +29,7 @@ export const timers = sqliteTable('timers', {
   submittedAt: integer('submitted_at'),
   discardedAt: integer('discarded_at'),
   note: text('note'),
-  pausedReason: text('paused_reason', { enum: ['manual', 'switched'] }),
+  pausedReason: text('paused_reason', { enum: ['manual', 'switched', 'idle'] }),
   switchedToTitle: text('switched_to_title'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull()

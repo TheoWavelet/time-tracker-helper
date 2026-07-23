@@ -4,11 +4,13 @@ import { registerTimerIpc } from './ipc/timers.ipc'
 import { registerTagsIpc } from './ipc/tags.ipc'
 import { registerSettingsIpc } from './ipc/settings.ipc'
 import { registerShellIpc } from './ipc/shell.ipc'
+import { registerBrowserIpc } from './ipc/browser.ipc'
 import { createOverlayWindow, registerOverlayIpc, applyDockSide, setActiveTimerCount } from './windows/overlayWindow'
 import { showDashboardWindow, registerDashboardIpc } from './windows/dashboardWindow'
 import { createTray, refreshTrayMenu } from './tray'
 import { getSnapshot, onTimersChanged } from './timerStore'
 import { startIdleMonitor } from './idleMonitor'
+import { startBrowserBridge } from './browserBridge'
 import { setQuitting } from './appState'
 import type { TimersSnapshot } from '@shared/types'
 
@@ -34,10 +36,12 @@ if (!gotSingleInstanceLock) {
     registerOverlayIpc()
     registerShellIpc()
     registerDashboardIpc()
+    registerBrowserIpc()
 
     createOverlayWindow()
     createTray()
     startIdleMonitor()
+    startBrowserBridge()
 
     setActiveTimerCount(countActiveTimers(getSnapshot()))
     onTimersChanged((snapshot) => {

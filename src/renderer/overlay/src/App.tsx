@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { TimerDTO, TimersSnapshot } from '@shared/types'
+import type { AppSettings, TimerDTO, TimersSnapshot } from '@shared/types'
 import { formatElapsedClock } from '@shared/format'
 import { useElapsedMs } from '../../shared/useElapsedTime'
 import { StartTimerForm, type StartTimerFormValue } from '../../shared/StartTimerForm'
@@ -14,17 +14,20 @@ const COLLAPSE_DELAY_MS = 250
 function BarRow({
   timer,
   onClick,
-  showTitle
+  showTitle,
+  highlightPaused
 }: {
   timer: TimerDTO
   onClick: () => void
   showTitle: boolean
+  highlightPaused: boolean
 }): JSX.Element {
   const elapsed = useElapsedMs(timer)
-  const pulse = useStatusPulse(timer.status)
+  const pulse = useStatusPulse(timer.status, timer.pausedReason)
   const className = [
     'bar-row',
     timer.status === 'running' ? 'bar-row--running' : '',
+    highlightPaused && timer.status === 'paused' ? 'bar-row--paused-alert' : '',
     showTitle ? 'bar-row--wide' : '',
     pulse ?? ''
   ]
@@ -40,6 +43,7 @@ function BarRow({
 
 export function App(): JSX.Element {
   const [snapshot, setSnapshot] = useState<TimersSnapshot | null>(null)
+  const [settings, setSettings] = useState<AppSettings | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [barWide, setBarWideState] = useState(false)
   const collapseTimerRef = useRef<number | undefined>(undefined)
@@ -47,7 +51,13 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     window.api.timers.getSnapshot().then(setSnapshot)
-    return window.api.timers.onChanged(setSnapshot)
+    window.api.settings.get().then(setSettings)
+    const offTimers = window.api.timers.onChanged(setSnapshot)
+    const offSettings = window.api.settings.onChanged(setSettings)
+    return () => {
+      offTimers()
+      offSettings()
+    }
   }, [])
 
   async function toggleExpanded(next: boolean): Promise<void> {
@@ -120,6 +130,11 @@ export function App(): JSX.Element {
 
   const activeTimers = snapshot.timers.filter((t) => t.status === 'running' || t.status === 'paused')
 
+  // Not "any paused timer" — switching between timers pauses the old one constantly and would
+  // flash on every normal switch. Only worth flagging when nothing at all is running.
+  const allActivePaused = activeTimers.length > 0 && activeTimers.every((t) => t.status === 'paused')
+  const highlightPaused = (settings?.highlightPausedTimers ?? true) && allActivePaused
+
   if (!expanded) {
     // The rows themselves are draggable+clickable (see BarRow); expanding only happens via the
     // dedicated "see more" strip below, so grabbing/clicking a row never triggers it by accident.
@@ -137,7 +152,13 @@ export function App(): JSX.Element {
             </div>
           ) : (
             activeTimers.map((timer) => (
-              <BarRow key={timer.id} timer={timer} onClick={() => toggleTimer(timer)} showTitle={barWide} />
+              <BarRow
+                key={timer.id}
+                timer={timer}
+                onClick={() => toggleTimer(timer)}
+                showTitle={barWide}
+                highlightPaused={highlightPaused}
+              />
             ))
           )}
         </div>
@@ -180,7 +201,7 @@ export function App(): JSX.Element {
           <section className="panel__section">
             <h3>Active</h3>
             {activeTimers.map((timer) => (
-              <TimerRow key={timer.id} timer={timer} {...panelTimerActions} />
+              <TimerRow key={timer.id} timer={timer} {...panelTimerActions} highlightPaused={highlightPaused} />
             ))}
           </section>
         )}

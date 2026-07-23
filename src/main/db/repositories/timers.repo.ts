@@ -68,12 +68,22 @@ export function insertTimer(input: InsertTimerInput): void {
     .run()
 }
 
-export function pauseTimerRow(id: string, reason: 'manual' | 'switched', switchedToTitle: string | null): void {
+/**
+ * `endAt` lets a caller (the idle monitor) finalize the segment as of when activity actually
+ * stopped, rather than "now" — so an idle auto-pause doesn't bill the idle gap as tracked time.
+ */
+export function pauseTimerRow(
+  id: string,
+  reason: 'manual' | 'switched' | 'idle',
+  switchedToTitle: string | null,
+  endAt?: number
+): void {
   const now = Date.now()
+  const effectiveEnd = endAt ?? now
   getDb()
     .update(timers)
     .set({
-      accumulatedMs: sql`${timers.accumulatedMs} + (${now} - ${timers.currentSegmentStartedAt})`,
+      accumulatedMs: sql`${timers.accumulatedMs} + (${effectiveEnd} - ${timers.currentSegmentStartedAt})`,
       currentSegmentStartedAt: null,
       status: 'paused',
       pausedReason: reason,
@@ -93,13 +103,8 @@ export function resumeTimerRow(id: string): void {
     .run()
 }
 
-/**
- * `endAt` lets a caller (the idle monitor) finalize the timer as of when activity actually
- * stopped, rather than "now" — so an auto-stop doesn't bill the idle gap itself as tracked time.
- */
-export function stopTimerRow(id: string, endAt?: number): void {
+export function stopTimerRow(id: string): void {
   const now = Date.now()
-  const effectiveEnd = endAt ?? now
   const db = getDb()
   const row = db.select({ currentSegmentStartedAt: timers.currentSegmentStartedAt }).from(timers).where(eq(timers.id, id)).get()
   if (!row) return
@@ -107,16 +112,16 @@ export function stopTimerRow(id: string, endAt?: number): void {
   if (row.currentSegmentStartedAt != null) {
     db.update(timers)
       .set({
-        accumulatedMs: sql`${timers.accumulatedMs} + (${effectiveEnd} - ${timers.currentSegmentStartedAt})`,
+        accumulatedMs: sql`${timers.accumulatedMs} + (${now} - ${timers.currentSegmentStartedAt})`,
         currentSegmentStartedAt: null,
         status: 'stopped',
-        stoppedAt: effectiveEnd,
+        stoppedAt: now,
         updatedAt: now
       })
       .where(eq(timers.id, id))
       .run()
   } else {
-    db.update(timers).set({ status: 'stopped', stoppedAt: effectiveEnd, updatedAt: now }).where(eq(timers.id, id)).run()
+    db.update(timers).set({ status: 'stopped', stoppedAt: now, updatedAt: now }).where(eq(timers.id, id)).run()
   }
 }
 

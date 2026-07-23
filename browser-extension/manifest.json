@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Time Tracker Bridge",
+  "version": "1.0.0",
+  "description": "Reports open tabs and domain-filtered history to the local Time Tracker desktop app.",
+  "permissions": ["tabs", "history", "storage", "alarms", "scripting"],
+  "host_permissions": ["*://*.atlassian.net/*", "*://*.clockwork.report/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html"
+}

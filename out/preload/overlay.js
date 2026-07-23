@@ -14,7 +14,17 @@ const api = {
     }
   },
   tags: {
-    listForPicker: () => electron.ipcRenderer.invoke("tags:listForPicker")
+    listForPicker: () => electron.ipcRenderer.invoke("tags:listForPicker"),
+    findOrCreateByLabelAndUrl: (label, url) => electron.ipcRenderer.invoke("tags:findOrCreateByLabelAndUrl", label, url),
+    toggleFavorite: (id) => electron.ipcRenderer.invoke("tags:toggleFavorite", id)
+  },
+  settings: {
+    get: () => electron.ipcRenderer.invoke("settings:get"),
+    onChanged: (callback) => {
+      const listener = (_event, settings) => callback(settings);
+      electron.ipcRenderer.on("settings:changed", listener);
+      return () => electron.ipcRenderer.removeListener("settings:changed", listener);
+    }
   },
   overlay: {
     setExpanded: (expanded) => electron.ipcRenderer.invoke("overlay:setExpanded", expanded),
@@ -28,6 +38,11 @@ const api = {
   },
   app: {
     openDashboard: () => electron.ipcRenderer.invoke("dashboard:show")
+  },
+  browser: {
+    listOpenTabs: () => electron.ipcRenderer.invoke("browser:listOpenTabs"),
+    searchHistoryByDomain: () => electron.ipcRenderer.invoke("browser:searchHistoryByDomain"),
+    getPairingInfo: () => electron.ipcRenderer.invoke("browser:getPairingInfo")
   }
 };
 electron.contextBridge.exposeInMainWorld("api", api);

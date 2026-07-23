@@ -9,21 +9,22 @@ interface TimerRowProps {
   onPause: (id: string) => void
   onResume: (id: string) => void
   onStop: (id: string) => void
+  highlightPaused?: boolean
 }
 
 function statusLabel(timer: TimerDTO): string {
   if (timer.status === 'paused') {
-    return timer.pausedReason === 'switched'
-      ? `Paused — switched to "${timer.switchedToTitle ?? '…'}"`
-      : 'Paused by you'
+    if (timer.pausedReason === 'switched') return `Paused — switched to "${timer.switchedToTitle ?? '…'}"`
+    if (timer.pausedReason === 'idle') return 'Paused — inactivity'
+    return 'Paused by you'
   }
   return 'Running'
 }
 
 /** The whole row is the click target: running -> pause, paused -> resume (switches to this one). */
-export function TimerRow({ timer, onPause, onResume, onStop }: TimerRowProps): JSX.Element {
+export function TimerRow({ timer, onPause, onResume, onStop, highlightPaused = true }: TimerRowProps): JSX.Element {
   const elapsed = useElapsedMs(timer)
-  const pulse = useStatusPulse(timer.status)
+  const pulse = useStatusPulse(timer.status, timer.pausedReason)
 
   function handleRowClick(): void {
     if (timer.status === 'running') onPause(timer.id)
@@ -38,6 +39,7 @@ export function TimerRow({ timer, onPause, onResume, onStop }: TimerRowProps): J
   const className = [
     'timer-row',
     timer.status === 'running' ? 'timer-row--running' : '',
+    highlightPaused && timer.status === 'paused' ? 'timer-row--paused-alert' : '',
     pulse ?? ''
   ]
     .filter(Boolean)

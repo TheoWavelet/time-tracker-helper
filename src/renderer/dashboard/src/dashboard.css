@@ -9,6 +9,21 @@ body,
 * {
   box-sizing: border-box;
   font-family: 'Segoe UI', system-ui, sans-serif;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+
+/* Hide the scrollbar everywhere while keeping the element scrollable. */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+code {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 0.9em;
 }
 
 body {
@@ -42,12 +57,98 @@ body {
   margin: 0;
 }
 
+.app__header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .dock-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: #a1a1aa;
+}
+
+.setting-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #a1a1aa;
+  cursor: pointer;
+}
+
+.browser-pairing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.browser-pairing__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f87171;
+  flex-shrink: 0;
+}
+
+.browser-pairing__dot.is-connected {
+  background: #4ade80;
+}
+
+.browser-pairing__token {
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.browser-pairing button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #27272a;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  transition:
+    background 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.browser-pairing button:hover {
+  background: #323236;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.browser-pairing button:active {
+  background: #1e1e21;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.browser-pairing__domain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #a1a1aa;
+  margin-bottom: 6px;
+}
+
+.browser-pairing__domain input {
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: inherit;
+  width: 160px;
 }
 
 .dock-toggle button {
@@ -158,6 +259,23 @@ body {
 /* "Timer is on" indicator — a blueish background tint. */
 .timer-row--running {
   background: rgba(56, 189, 248, 0.2);
+}
+
+/* Flags any currently-paused timer (manual, switched, or idle) — keeps flashing until resumed/stopped. */
+.timer-row--paused-alert {
+  animation: paused-alert-flash 1.6s ease-in-out infinite;
+}
+
+@keyframes paused-alert-flash {
+  0%,
+  100% {
+    background: #27272a;
+    border-color: rgba(248, 113, 113, 0.35);
+  }
+  50% {
+    background: rgba(220, 38, 38, 0.35);
+    border-color: rgba(248, 113, 113, 0.9);
+  }
 }
 
 .timer-row__main {
@@ -272,7 +390,6 @@ body {
 
 .tag-picker__header {
   display: flex;
-  justify-content: space-between;
   gap: 6px;
   padding: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -304,6 +421,20 @@ body {
   overflow-y: auto;
 }
 
+.tag-picker__list + .tag-picker__list,
+.tag-picker__list + .tag-picker__header {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.tag-picker__section-label {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #a1a1aa;
+}
+
 .tag-picker__row {
   display: flex;
   flex-direction: column;
@@ -321,6 +452,49 @@ body {
 
 .tag-picker__row:hover {
   background: rgba(245, 158, 11, 0.15);
+}
+
+/* Tag rows: a row-direction wrapper (label+url button, plus a separate favorite-star button). */
+.tag-picker__row--tag {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tag-picker__row--tag:hover {
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.tag-picker__row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: inherit;
+}
+
+.tag-picker__favorite-btn {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.25);
+  transition: color 0.1s ease;
+}
+
+.tag-picker__favorite-btn:hover,
+.tag-picker__favorite-btn.is-favorite {
+  color: #f59e0b;
 }
 
 .tag-picker__row-url {

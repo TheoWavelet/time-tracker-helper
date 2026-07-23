@@ -53,6 +53,12 @@ export function pauseTimer(id: string): void {
   emitChange()
 }
 
+/** Auto-pause from idle detection, backdated to when activity actually stopped (see idleMonitor.ts). */
+export function pauseTimerForIdle(id: string, endAt: number): void {
+  timersRepo.pauseTimerRow(id, 'idle', null, endAt)
+  emitChange()
+}
+
 export function resumeTimer(id: string): void {
   const sqlite = getRawSqlite()
   sqlite.transaction(() => {
@@ -66,8 +72,8 @@ export function resumeTimer(id: string): void {
   emitChange()
 }
 
-export function stopTimer(id: string, endAt?: number): void {
-  timersRepo.stopTimerRow(id, endAt)
+export function stopTimer(id: string): void {
+  timersRepo.stopTimerRow(id)
   emitChange()
 }
 
@@ -87,4 +93,12 @@ export function listTags() {
 
 export function listTagsForPicker() {
   return tagsRepo.listTagsForPicker()
+}
+
+export function findOrCreateTagByLabelAndUrl(label: string, url: string) {
+  return tagsRepo.findOrCreateTagByLabelAndUrl(label, url)
+}
+
+export function toggleTagFavorite(id: string) {
+  return tagsRepo.toggleTagFavorite(id)
 }

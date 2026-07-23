@@ -4,7 +4,7 @@ import { getSettings, setDockYOffset } from '../settingsStore'
 import type { DockSide } from '@shared/types'
 
 const BAR_WIDTH = 88
-const BAR_WIDE_WIDTH = BAR_WIDTH * 2
+const BAR_WIDE_WIDTH = BAR_WIDTH * 4
 const BAR_ROW_HEIGHT = 40
 const SEE_MORE_HEIGHT = 18
 const PANEL_SIZE = { width: 320, height: 440 }

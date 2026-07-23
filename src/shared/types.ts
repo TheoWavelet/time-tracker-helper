@@ -17,8 +17,8 @@ export interface TimerDTO {
   submittedAt: number | null
   discardedAt: number | null
   note: string | null
-  /** UI-only reason a paused timer isn't running: did the user pause it, or did another timer take over? */
-  pausedReason: 'manual' | 'switched' | null
+  /** UI-only reason a paused timer isn't running: manual pause, switched to another timer, or idle-auto-paused. */
+  pausedReason: 'manual' | 'switched' | 'idle' | null
   switchedToTitle: string | null
   createdAt: number
   updatedAt: number
@@ -57,4 +57,26 @@ export interface AppSettings {
   dockSide: DockSide
   /** Vertical pixel offset from the display's work-area top, for the dragged bar position. null = auto-centered. */
   dockYOffset: number | null
+  /** When on, all active timers flash red whenever none of them are running (all paused, nothing tracking). */
+  highlightPausedTimers: boolean
+  /** Substring match against tab/page URLs — restricts both open tabs and history to this domain. Blank = no filter. */
+  browserDomainFilter: string
+}
+
+/** A currently-open Chrome tab, reported live by the paired browser extension, already domain-filtered. */
+export interface OpenTabInfo {
+  title: string
+  url: string
+}
+
+/** A visited page matching the domain filter, reported by the paired browser extension. */
+export interface DomainHistoryItem {
+  title: string
+  url: string
+  lastVisitTime: number
+}
+
+export interface BrowserPairingInfo {
+  token: string
+  connected: boolean
 }

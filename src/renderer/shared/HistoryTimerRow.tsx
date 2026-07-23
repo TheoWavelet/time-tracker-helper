@@ -7,9 +7,27 @@ interface HistoryTimerRowProps {
   onDelete: (id: string) => void
 }
 
+/**
+ * Tells the paired browser extension (via a query param it watches for on page load) to click
+ * Jira's "Log work" button automatically — see browser-extension/background.js.
+ */
+function withLogWorkTrigger(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set('tt_logwork', '1')
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
 export function HistoryTimerRow({ timer, onDelete }: HistoryTimerRowProps): JSX.Element {
   function handleDelete(): void {
     if (window.confirm('Delete this saved timer? This cannot be undone.')) onDelete(timer.id)
+  }
+
+  function handleOpenTagLink(): void {
+    window.api.shell.openExternal(withLogWorkTrigger(timer.tagTargetUrl!))
   }
 
   return (
@@ -21,7 +39,7 @@ export function HistoryTimerRow({ timer, onDelete }: HistoryTimerRowProps): JSX.
       <div className="history-row__meta">
         {timer.tagLabel &&
           (timer.tagTargetUrl ? (
-            <button className="link-button" onClick={() => window.api.shell.openExternal(timer.tagTargetUrl!)}>
+            <button className="link-button" onClick={handleOpenTagLink}>
               {timer.tagLabel}
             </button>
           ) : (

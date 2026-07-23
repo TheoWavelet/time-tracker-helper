@@ -69,3 +69,41 @@ export function findOrCreateTagByLabel(label: string): TagDTO {
 
   return { id, label: trimmed, targetUrl: null, isFavorite: false, createdAt: now, updatedAt: now }
 }
+
+/**
+ * Used when picking a browser tab or history entry in the tag picker. Existing tags win by label
+ * (same lookup as findOrCreateTagByLabel) — a blank target_url gets backfilled to the picked URL,
+ * but an existing different target_url is left alone rather than silently overwriting it.
+ */
+export function findOrCreateTagByLabelAndUrl(label: string, url: string): TagPickerEntry {
+  const trimmedLabel = label.trim()
+  const trimmedUrl = url.trim()
+  const existing = findTagByLabel(trimmedLabel)
+
+  if (existing) {
+    if (!existing.targetUrl) {
+      getDb().update(tags).set({ targetUrl: trimmedUrl, updatedAt: Date.now() }).where(eq(tags.id, existing.id)).run()
+    }
+  } else {
+    const now = Date.now()
+    getDb()
+      .insert(tags)
+      .values({ id: randomUUID(), label: trimmedLabel, targetUrl: trimmedUrl, isFavorite: false, createdAt: now, updatedAt: now })
+      .run()
+  }
+
+  const picked = listTagsForPicker().find((tag) => tag.label === trimmedLabel)
+  if (!picked) throw new Error('Tag disappeared immediately after creation')
+  return picked
+}
+
+export function toggleTagFavorite(id: string): TagPickerEntry {
+  const current = getDb().select({ isFavorite: tags.isFavorite }).from(tags).where(eq(tags.id, id)).get()
+  if (!current) throw new Error(`Tag ${id} not found`)
+
+  getDb().update(tags).set({ isFavorite: !current.isFavorite, updatedAt: Date.now() }).where(eq(tags.id, id)).run()
+
+  const updated = listTagsForPicker().find((tag) => tag.id === id)
+  if (!updated) throw new Error('Tag disappeared immediately after update')
+  return updated
+}
