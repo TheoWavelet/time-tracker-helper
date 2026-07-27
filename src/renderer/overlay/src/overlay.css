@@ -545,14 +545,6 @@ body,
   margin-top: 4px;
 }
 
-.custom-log-indicator {
-  border: 1px solid rgba(125, 211, 252, 0.45);
-  border-radius: 999px;
-  padding: 1px 5px;
-  color: #7dd3fc;
-  font-size: 9px;
-  font-weight: 600;
-}
 
 /* Tag-or-title combobox: one field doubles as a plain title input and a tag autocomplete. */
 .tag-picker {

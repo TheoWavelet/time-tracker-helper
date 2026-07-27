@@ -3,7 +3,7 @@ import type { AppSettings, TimerDTO, TimersSnapshot } from '@shared/types'
 import { formatElapsedClock } from '@shared/format'
 import { useElapsedMs, useStatusPulse } from '../../components/timerDisplay'
 import { StartTimerForm, type StartTimerFormValue } from '../../components/TimerStarter'
-import { HistoryTimerRow, TimerRow } from '../../components/TimerRows'
+import { TimerRow } from '../../components/TimerRows'
 import { ChevronDownIcon, LogsIcon, ToastStack, useToasts } from '../../components/ui'
 import { isWindowDragInProgress, startWindowDrag } from './windowDrag'
 
@@ -51,7 +51,6 @@ export function App(): JSX.Element {
   const [barWide, setBarWideState] = useState(false)
   const collapseTimerRef = useRef<number | undefined>(undefined)
   const expandTimerRef = useRef<number | undefined>(undefined)
-  const [recentCustomLogIds, setRecentCustomLogIds] = useState<string[]>([])
   const [newTimerId, setNewTimerId] = useState<string | null>(null)
   const { toasts, pushToast } = useToasts()
 
@@ -72,7 +71,6 @@ export function App(): JSX.Element {
     await window.api.overlay.setExpanded(next)
     setExpanded(next)
     if (!next) {
-      setRecentCustomLogIds([])
       // The main process already resets its own barWide to false on collapse (so the window
       // itself resizes narrow) — but this renderer-side flag is separate state and was never
       // told to follow, so a stale `true` here renders titles against an already-narrow window.
@@ -168,8 +166,11 @@ export function App(): JSX.Element {
 
   async function handleCreateCustomLog(value: StartTimerFormValue, durationMinutes: number): Promise<void> {
     const created = await window.api.timers.createCustomLog({ ...value, durationMinutes })
-    setRecentCustomLogIds((ids) => [created.id, ...ids])
     pushToast(`Logged ${durationMinutes} min for “${created.title}”`)
+    setNewTimerId(created.id)
+    window.setTimeout(() => {
+      setNewTimerId((current) => (current === created.id ? null : current))
+    }, NEW_TIMER_FLASH_MS)
   }
 
   const panelTimerActions = {
@@ -182,13 +183,14 @@ export function App(): JSX.Element {
   if (!snapshot) return <div className="bar-container" />
 
   const activeTimers = snapshot.timers.filter((t) => t.status === 'running' || t.status === 'paused')
-  const recentCustomLogs = recentCustomLogIds
-    .map((id) => snapshot.timers.find((timer) => timer.id === id))
-    .filter((timer): timer is TimerDTO => timer != null)
 
   // Not "any paused timer" — switching between timers pauses the old one constantly and would
-  // flash on every normal switch. Only worth flagging when nothing at all is running.
-  const allActivePaused = activeTimers.length > 0 && activeTimers.every((t) => t.status === 'paused')
+  // flash on every normal switch. Only worth flagging when nothing at all is running. Custom logs
+  // are excluded from the trigger itself (a deliberately-logged paused chunk isn't a forgotten
+  // timer) — though if something else genuinely triggers the alert, they still flash along with
+  // every other paused row, since they render with no special-casing otherwise.
+  const flashTriggerTimers = activeTimers.filter((t) => t.kind !== 'custom_log')
+  const allActivePaused = flashTriggerTimers.length > 0 && flashTriggerTimers.every((t) => t.status === 'paused')
   const highlightPaused = (settings?.highlightPausedTimers ?? false) && allActivePaused
 
   if (!expanded) {
@@ -270,13 +272,6 @@ export function App(): JSX.Element {
                 isNew={timer.id === newTimerId}
               />
             ))}
-          </section>
-        )}
-
-        {recentCustomLogs.length > 0 && (
-          <section className="panel__section">
-            <h3>Just logged</h3>
-            {recentCustomLogs.map((timer) => <HistoryTimerRow key={timer.id} timer={timer} onDelete={(id) => window.api.timers.delete(id)} />)}
           </section>
         )}
       </div>

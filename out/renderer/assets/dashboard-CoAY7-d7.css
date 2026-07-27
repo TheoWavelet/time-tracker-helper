@@ -624,15 +624,6 @@ body {
   opacity: 0.7;
 }
 
-.custom-log-indicator {
-  border: 1px solid rgba(125, 211, 252, 0.45);
-  border-radius: 999px;
-  padding: 2px 6px;
-  color: #7dd3fc;
-  font-size: 10px;
-  font-weight: 600;
-}
-
 .link-button {
   background: none;
   border: none;

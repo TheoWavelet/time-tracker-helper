@@ -77,10 +77,9 @@ export function createCustomTimerLog(input: CustomTimerLogInput): TimerDTO {
     return customLogId
   })()
 
+  emitChange()
   const created = timersRepo.findTimerById(id)
   if (!created) throw new Error('Custom log disappeared immediately after creation')
-  statsStore.recordTrackedTime(loggedAt, created.accumulatedMs)
-  emitChange()
   return created
 }
 

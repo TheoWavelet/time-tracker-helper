@@ -1,4 +1,4 @@
-import { r as reactExports, f as formatDefaultTimerTitle, j as jsxRuntimeExports, P as PlusIcon, b as ClockPlusIcon, u as useToasts, d as ChevronDownIcon, T as ToastStack, L as LogsIcon, e as TimerRow, H as HistoryTimerRow, g as useElapsedMs, h as useStatusPulse, i as formatElapsedClock, c as client, R as React } from "./TimerRows-CHSHBSrZ.js";
+import { r as reactExports, f as formatDefaultTimerTitle, j as jsxRuntimeExports, P as PlusIcon, b as ClockPlusIcon, u as useToasts, d as ChevronDownIcon, T as ToastStack, L as LogsIcon, e as TimerRow, g as useElapsedMs, h as useStatusPulse, i as formatElapsedClock, c as client, R as React } from "./TimerRows-rZusqEBO.js";
 const BROWSER_PAGE_SIZE = 50;
 function sortTags(tags, view) {
   return [...tags].sort(
@@ -356,7 +356,6 @@ function App() {
   const [barWide, setBarWideState] = reactExports.useState(false);
   const collapseTimerRef = reactExports.useRef(void 0);
   const expandTimerRef = reactExports.useRef(void 0);
-  const [recentCustomLogIds, setRecentCustomLogIds] = reactExports.useState([]);
   const [newTimerId, setNewTimerId] = reactExports.useState(null);
   const { toasts, pushToast } = useToasts();
   reactExports.useEffect(() => {
@@ -375,7 +374,6 @@ function App() {
     await window.api.overlay.setExpanded(next);
     setExpanded(next);
     if (!next) {
-      setRecentCustomLogIds([]);
       setBarWideState(false);
     }
   }
@@ -448,8 +446,11 @@ function App() {
   }
   async function handleCreateCustomLog(value, durationMinutes) {
     const created = await window.api.timers.createCustomLog({ ...value, durationMinutes });
-    setRecentCustomLogIds((ids) => [created.id, ...ids]);
     pushToast(`Logged ${durationMinutes} min for “${created.title}”`);
+    setNewTimerId(created.id);
+    window.setTimeout(() => {
+      setNewTimerId((current) => current === created.id ? null : current);
+    }, NEW_TIMER_FLASH_MS);
   }
   const panelTimerActions = {
     onPause: handlePauseFromPanel,
@@ -459,8 +460,8 @@ function App() {
   };
   if (!snapshot) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bar-container" });
   const activeTimers = snapshot.timers.filter((t) => t.status === "running" || t.status === "paused");
-  const recentCustomLogs = recentCustomLogIds.map((id) => snapshot.timers.find((timer) => timer.id === id)).filter((timer) => timer != null);
-  const allActivePaused = activeTimers.length > 0 && activeTimers.every((t) => t.status === "paused");
+  const flashTriggerTimers = activeTimers.filter((t) => t.kind !== "custom_log");
+  const allActivePaused = flashTriggerTimers.length > 0 && flashTriggerTimers.every((t) => t.status === "paused");
   const highlightPaused = (settings?.highlightPausedTimers ?? false) && allActivePaused;
   if (!expanded) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bar-container", onMouseEnter: handleBarContainerMouseEnter, onMouseLeave: handleBarContainerMouseLeave, children: [
@@ -537,10 +538,6 @@ function App() {
           },
           timer.id
         ))
-      ] }),
-      recentCustomLogs.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "panel__section", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Just logged" }),
-        recentCustomLogs.map((timer) => /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryTimerRow, { timer, onDelete: (id) => window.api.timers.delete(id) }, timer.id))
       ] })
     ] })
   ] });

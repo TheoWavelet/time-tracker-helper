@@ -129,7 +129,6 @@ export function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpen
       </div>
       <div className="history-row__meta">
         <div className="history-row__meta-left">
-          {timer.kind === 'custom_log' && <span className="custom-log-indicator">Custom log</span>}
           {timer.tagLabel &&
             (timer.tagTargetUrl ? (
               <button

@@ -7181,17 +7181,14 @@ function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpened }) {
       timer.clockworkLoggedAt != null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "clockwork-logged-badge", title: "Logged automatically to Clockwork", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CheckIcon, {}) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row__meta", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row__meta-left", children: [
-        timer.kind === "custom_log" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "custom-log-indicator", children: "Custom log" }),
-        timer.tagLabel && (timer.tagTargetUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            className: `link-button${isVisited ? " is-visited" : ""}${isConfirmed ? " is-confirmed" : ""}`,
-            onClick: handleOpenTagLink,
-            children: timer.tagLabel
-          }
-        ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `history-row__tag${isConfirmed ? " is-confirmed" : ""}`, children: timer.tagLabel }))
-      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "history-row__meta-left", children: timer.tagLabel && (timer.tagTargetUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          className: `link-button${isVisited ? " is-visited" : ""}${isConfirmed ? " is-confirmed" : ""}`,
+          onClick: handleOpenTagLink,
+          children: timer.tagLabel
+        }
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `history-row__tag${isConfirmed ? " is-confirmed" : ""}`, children: timer.tagLabel })) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row__meta-right", children: [
         onToggleConfirmed && /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",

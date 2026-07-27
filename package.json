@@ -3,7 +3,10 @@
   "version": "2.1.0",
   "description": "Personal time-tracking overlay app",
   "main": "./out/main/index.js",
-  "author": "Time Tracker Contributors",
+  "author": {
+    "name": "Time Tracker Contributors",
+    "email": "noreply@example.com"
+  },
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",

@@ -89,6 +89,15 @@ export interface InsertCustomTimerLogInput {
   loggedAt: number
 }
 
+/**
+ * Creates it as a regular paused timer (not a finalized "stopped" entry) — rendered identically to
+ * any other timer you paused by hand, with the given duration pre-loaded onto its clock. It can be
+ * resumed, paused again, or stopped/saved just like any other timer, and only contributes to daily
+ * stats once it's actually stopped (same as everything else) rather than the instant it's created.
+ * `kind` stays 'custom_log' purely as an internal marker (nothing renders differently off it) so it
+ * can be excluded from the "all timers paused" highlight trigger — a deliberately-logged chunk of
+ * time sitting paused isn't the same as a timer you forgot to resume.
+ */
 export function insertCustomTimerLog(input: InsertCustomTimerLogInput): void {
   getDb()
     .insert(timers)
@@ -96,12 +105,12 @@ export function insertCustomTimerLog(input: InsertCustomTimerLogInput): void {
       id: input.id,
       title: input.title,
       kind: 'custom_log',
-      status: 'stopped',
+      status: 'paused',
+      pausedReason: 'manual',
       tagId: input.tagId,
-      startedAt: input.loggedAt - input.durationMs,
+      startedAt: input.loggedAt,
       currentSegmentStartedAt: null,
       accumulatedMs: input.durationMs,
-      stoppedAt: input.loggedAt,
       createdAt: input.loggedAt,
       updatedAt: input.loggedAt
     })

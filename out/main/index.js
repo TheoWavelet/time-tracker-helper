@@ -300,12 +300,12 @@ function insertCustomTimerLog(input) {
     id: input.id,
     title: input.title,
     kind: "custom_log",
-    status: "stopped",
+    status: "paused",
+    pausedReason: "manual",
     tagId: input.tagId,
-    startedAt: input.loggedAt - input.durationMs,
+    startedAt: input.loggedAt,
     currentSegmentStartedAt: null,
     accumulatedMs: input.durationMs,
-    stoppedAt: input.loggedAt,
     createdAt: input.loggedAt,
     updatedAt: input.loggedAt
   }).run();
@@ -620,10 +620,9 @@ function createCustomTimerLog(input) {
     });
     return customLogId;
   })();
+  emitChange();
   const created = findTimerById(id);
   if (!created) throw new Error("Custom log disappeared immediately after creation");
-  recordTrackedTime(loggedAt, created.accumulatedMs);
-  emitChange();
   return created;
 }
 function pauseTimer(id) {
