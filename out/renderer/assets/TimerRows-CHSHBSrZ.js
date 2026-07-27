@@ -7177,7 +7177,8 @@ function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpened }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row__main", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `history-row__title${isConfirmed ? " is-confirmed" : ""}`, children: timer.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "history-row__duration", children: formatDurationHuman(timer.accumulatedMs) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "history-row__duration", children: formatDurationHuman(timer.accumulatedMs) }),
+      timer.clockworkLoggedAt != null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "clockwork-logged-badge", title: "Logged automatically to Clockwork", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CheckIcon, {}) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row__meta", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row__meta-left", children: [

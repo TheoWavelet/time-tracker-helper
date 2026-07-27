@@ -11,6 +11,8 @@ export interface StartTimerFormValue {
 interface StartTimerFormProps {
   onStart: (value: StartTimerFormValue) => void
   onCreateCustomLog: (value: StartTimerFormValue, durationMinutes: number) => void
+  /** When true, a picked tag resolving to a Clockwork issue will have its time logged automatically. */
+  clockworkSyncActive?: boolean
 }
 
 type PickerView = 'all' | 'recent' | 'most_used' | 'favorites'
@@ -48,6 +50,32 @@ function sortTags(tags: TagPickerEntry[], view: PickerView): TagPickerEntry[] {
 
 function matchesQuery(query: string, title: string, url: string): boolean {
   return !query || title.toLowerCase().includes(query) || url.toLowerCase().includes(query)
+}
+
+// A Jira-style issue key: 2-4 uppercase letters, a hyphen, then digits (e.g. "WWAB-1234").
+const ISSUE_KEY_PATTERN = /^[A-Z]{2,4}-\d+$/
+const TITLE_STARTS_WITH_ISSUE_KEY = /^[A-Z]{2,4}-\d+\b/
+
+function findIssueKeyInQueryParams(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  for (const value of parsed.searchParams.values()) {
+    if (ISSUE_KEY_PATTERN.test(value)) return value
+  }
+  return null
+}
+
+/** Some Atlassian pages (e.g. a Jira board with an issue selected) only reference the issue via a
+ *  query param, not the page title itself — prepend it so these are still identifiable in the
+ *  picker list. No-ops for anything else (non-Atlassian URLs won't have a matching query param). */
+function withIssueKeyPrefix(title: string, url: string): string {
+  if (TITLE_STARTS_WITH_ISSUE_KEY.test(title)) return title
+  const issueKey = findIssueKeyInQueryParams(url)
+  return issueKey ? `${issueKey} ${title}` : title
 }
 
 /** The URL is available as a native tooltip on hover (via `title`) rather than shown inline. */
@@ -140,8 +168,16 @@ function TagPicker({ value, onChange, onPickTag, placeholder }: TagPickerProps):
 
   // Open tabs first, then history — combined into one searchable, paginated list under "All".
   const allBrowserItems: BrowserPickItem[] = [
-    ...visibleTabs.map((tab, index) => ({ key: `tab-${tab.url}-${index}`, title: tab.title, url: tab.url })),
-    ...visibleHistory.map((item) => ({ key: `history-${item.url}-${item.lastVisitTime}`, title: item.title, url: item.url }))
+    ...visibleTabs.map((tab, index) => ({
+      key: `tab-${tab.url}-${index}`,
+      title: withIssueKeyPrefix(tab.title, tab.url),
+      url: tab.url
+    })),
+    ...visibleHistory.map((item) => ({
+      key: `history-${item.url}-${item.lastVisitTime}`,
+      title: withIssueKeyPrefix(item.title, item.url),
+      url: item.url
+    }))
   ]
   const visibleBrowserItems = allBrowserItems.slice(0, browserPageCount)
 
@@ -208,7 +244,7 @@ function TagPicker({ value, onChange, onPickTag, placeholder }: TagPickerProps):
 const DEFAULT_CUSTOM_LOG_HOURS = '0'
 const DEFAULT_CUSTOM_LOG_MINUTES = '15'
 
-export function StartTimerForm({ onStart, onCreateCustomLog }: StartTimerFormProps): JSX.Element {
+export function StartTimerForm({ onStart, onCreateCustomLog, clockworkSyncActive = false }: StartTimerFormProps): JSX.Element {
   const [text, setText] = useState('')
   const [pickedTag, setPickedTag] = useState<TagPickerEntry | null>(null)
   const [customLogOpen, setCustomLogOpen] = useState(false)
@@ -269,10 +305,19 @@ export function StartTimerForm({ onStart, onCreateCustomLog }: StartTimerFormPro
     }
   }
 
+  const willLogAutomatically = clockworkSyncActive && pickedTag?.clockworkIssueKey != null
+
   return (
     <form className="start-timer-form" onSubmit={handleSubmit}>
       <TagPicker value={text} onChange={handleChange} onPickTag={handlePickTag} placeholder={`Plain title (e.g. ${defaultTitlePreview}) or pick a tag…`} />
-      <button type="submit" className="icon-button icon-button--add" aria-label="Start timer"><PlusIcon /></button>
+      <button
+        type="submit"
+        className={`icon-button icon-button--add${willLogAutomatically ? ' icon-button--add-clockwork' : ''}`}
+        aria-label="Start timer"
+        title={willLogAutomatically ? 'Can be logged automatically' : undefined}
+      >
+        <PlusIcon />
+      </button>
       <div className="custom-log-popover-wrapper" ref={customLogRef}>
         <button
           type="button"

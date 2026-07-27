@@ -136,6 +136,17 @@ body {
   gap: 8px;
 }
 
+.clockwork-token-input {
+  flex: 1;
+  min-width: 0;
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: inherit;
+}
+
 .browser-pairing__dot {
   width: 8px;
   height: 8px;
@@ -203,6 +214,14 @@ body {
   font-size: 12px;
   color: inherit;
   width: 100%;
+}
+
+.extension-guide__steps {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #a1a1aa;
+  line-height: 1.6;
 }
 
 .dock-toggle button {
@@ -391,6 +410,16 @@ body {
   background: #d97f06;
 }
 
+/* Signals the tag currently entered will have its time logged to Clockwork automatically. */
+.icon-button--add-clockwork {
+  background: #c084fc;
+  color: #2e1065;
+}
+
+.icon-button--add-clockwork:hover {
+  background: #a855f7;
+}
+
 .icon-button--custom-log {
   background: rgba(56, 189, 248, 0.2);
   color: #7dd3fc;
@@ -551,6 +580,14 @@ body {
 .history-row__duration {
   font-variant-numeric: tabular-nums;
   color: #a1a1aa;
+}
+
+.clockwork-logged-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #c084fc;
 }
 
 .history-row__meta {

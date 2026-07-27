@@ -3,6 +3,7 @@ import { getRawSqlite } from './db/connection'
 import * as timersRepo from './db/repositories/timers.repo'
 import * as tagsRepo from './db/repositories/tags.repo'
 import * as statsStore from './statsStore'
+import * as clockworkSync from './clockworkSync'
 import { formatDefaultTimerTitle } from '@shared/format'
 import type { CustomTimerLogInput, StartTimerInput, TimerDTO, TimersSnapshot } from '@shared/types'
 
@@ -31,10 +32,12 @@ export function startTimer(input: StartTimerInput): TimerDTO {
   const now = Date.now()
   const title = input.title?.trim() || formatDefaultTimerTitle(now)
 
+  let previousRunningTagId: string | null | undefined
   const newId = sqlite.transaction(() => {
     const running = timersRepo.findRunningTimer()
     if (running) {
       timersRepo.pauseTimerRow(running.id, 'switched', title)
+      previousRunningTagId = running.tagId
     }
 
     const tagId = input.tagLabel?.trim() ? tagsRepo.findOrCreateTagByLabel(input.tagLabel).id : null
@@ -46,6 +49,10 @@ export function startTimer(input: StartTimerInput): TimerDTO {
   emitChange()
   const created = timersRepo.findTimerById(newId)
   if (!created) throw new Error('Timer disappeared immediately after creation')
+
+  if (previousRunningTagId !== undefined) void clockworkSync.notifyTimerSegmentEnded(previousRunningTagId)
+  void clockworkSync.notifyTimerRunning(created.id, created.tagId)
+
   return created
 }
 
@@ -78,27 +85,37 @@ export function createCustomTimerLog(input: CustomTimerLogInput): TimerDTO {
 }
 
 export function pauseTimer(id: string): void {
+  const timer = timersRepo.findTimerById(id)
   timersRepo.pauseTimerRow(id, 'manual', null)
   emitChange()
+  void clockworkSync.notifyTimerSegmentEnded(timer?.tagId ?? null)
 }
 
 /** Auto-pause from idle detection, backdated to when activity actually stopped (see idleMonitor.ts). */
 export function pauseTimerForIdle(id: string, endAt: number): void {
+  const timer = timersRepo.findTimerById(id)
   timersRepo.pauseTimerRow(id, 'idle', null, endAt)
   emitChange()
+  void clockworkSync.notifyTimerSegmentEnded(timer?.tagId ?? null)
 }
 
 export function resumeTimer(id: string): void {
   const sqlite = getRawSqlite()
-  sqlite.transaction(() => {
+  let previousRunningTagId: string | null | undefined
+  const target = sqlite.transaction(() => {
     const running = timersRepo.findRunningTimer()
     const target = timersRepo.findTimerById(id)
     if (running && running.id !== id) {
       timersRepo.pauseTimerRow(running.id, 'switched', target?.title ?? null)
+      previousRunningTagId = running.tagId
     }
     timersRepo.resumeTimerRow(id)
+    return target
   })()
   emitChange()
+
+  if (previousRunningTagId !== undefined) void clockworkSync.notifyTimerSegmentEnded(previousRunningTagId)
+  void clockworkSync.notifyTimerRunning(id, target?.tagId ?? null)
 }
 
 export function stopTimer(id: string): void {
@@ -108,6 +125,15 @@ export function stopTimer(id: string): void {
     statsStore.recordTrackedTime(stopped.stoppedAt, stopped.accumulatedMs)
   }
   emitChange()
+
+  if (stopped) {
+    void clockworkSync.notifyTimerSaved(stopped.tagId).then((logged) => {
+      if (logged) {
+        timersRepo.markClockworkLogged(id)
+        emitChange()
+      }
+    })
+  }
 }
 
 /** Soft delete — moves the timer to the archive (see the "Archive & stats" window) rather than

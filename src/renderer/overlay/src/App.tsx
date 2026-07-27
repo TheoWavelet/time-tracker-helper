@@ -252,7 +252,11 @@ export function App(): JSX.Element {
       </div>
 
       <div className="panel__body">
-        <StartTimerForm onStart={handleStartFromPanel} onCreateCustomLog={handleCreateCustomLog} />
+        <StartTimerForm
+          onStart={handleStartFromPanel}
+          onCreateCustomLog={handleCreateCustomLog}
+          clockworkSyncActive={settings?.clockworkSyncEnabled ?? false}
+        />
 
         {activeTimers.length > 0 && (
           <section className="panel__section">

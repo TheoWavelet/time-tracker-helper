@@ -30,6 +30,7 @@ const api = {
     setDockSide: (dockSide) => electron.ipcRenderer.invoke("settings:setDockSide", dockSide),
     setHighlightPausedTimers: (value) => electron.ipcRenderer.invoke("settings:setHighlightPausedTimers", value),
     setBrowserDomainFilter: (value) => electron.ipcRenderer.invoke("settings:setBrowserDomainFilter", value),
+    setClockworkSyncEnabled: (value) => electron.ipcRenderer.invoke("settings:setClockworkSyncEnabled", value),
     onChanged: (callback) => {
       const listener = (_event, settings) => callback(settings);
       electron.ipcRenderer.on("settings:changed", listener);
@@ -46,6 +47,10 @@ const api = {
     listOpenTabs: () => electron.ipcRenderer.invoke("browser:listOpenTabs"),
     searchHistoryByDomain: () => electron.ipcRenderer.invoke("browser:searchHistoryByDomain"),
     getPairingInfo: () => electron.ipcRenderer.invoke("browser:getPairingInfo")
+  },
+  clockwork: {
+    getStatus: () => electron.ipcRenderer.invoke("clockwork:getStatus"),
+    setApiToken: (token) => electron.ipcRenderer.invoke("clockwork:setApiToken", token)
   }
 };
 electron.contextBridge.exposeInMainWorld("api", api);

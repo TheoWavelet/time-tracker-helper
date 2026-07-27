@@ -121,6 +121,11 @@ export function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpen
       <div className="history-row__main">
         <span className={`history-row__title${isConfirmed ? ' is-confirmed' : ''}`}>{timer.title}</span>
         <span className="history-row__duration">{formatDurationHuman(timer.accumulatedMs)}</span>
+        {timer.clockworkLoggedAt != null && (
+          <span className="clockwork-logged-badge" title="Logged automatically to Clockwork">
+            <CheckIcon />
+          </span>
+        )}
       </div>
       <div className="history-row__meta">
         <div className="history-row__meta-left">

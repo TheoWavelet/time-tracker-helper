@@ -26,6 +26,9 @@ export interface TimerDTO {
   loggedConfirmedAt: number | null
   /** Set when deleted from history — soft-deleted into the archive rather than destroyed. */
   archivedAt: number | null
+  /** Set once this timer's time was successfully mirrored to Clockwork — drives the "logged
+   *  automatically" indicator in history. */
+  clockworkLoggedAt: number | null
   createdAt: number
   updatedAt: number
 }
@@ -35,6 +38,8 @@ export interface TagDTO {
   label: string
   targetUrl: string | null
   isFavorite: boolean
+  /** Auto-derived from targetUrl (e.g. ".../browse/SSP-13") — drives automatic Clockwork sync. */
+  clockworkIssueKey: string | null
   createdAt: number
   updatedAt: number
 }
@@ -74,6 +79,8 @@ export interface AppSettings {
   highlightPausedTimers: boolean
   /** Substring match against tab/page URLs — restricts both open tabs and history to this domain. Blank = no filter. */
   browserDomainFilter: string
+  /** Master on/off switch for the whole Clockwork integration — off by default even with a token set. */
+  clockworkSyncEnabled: boolean
 }
 
 /** A currently-open Chrome tab, reported live by the paired browser extension, already domain-filtered. */
@@ -92,6 +99,10 @@ export interface DomainHistoryItem {
 export interface BrowserPairingInfo {
   token: string
   connected: boolean
+}
+
+export interface ClockworkStatus {
+  hasToken: boolean
 }
 
 /** One day's slot in the current (Monday-start) week. */

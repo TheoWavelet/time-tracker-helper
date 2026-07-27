@@ -6,12 +6,14 @@ import migration0001 from './migrations/0001_init.sql?raw'
 import migration0002 from './migrations/0002_allow_idle_paused_reason.sql?raw'
 import migration0003 from './migrations/0003_custom_log_kind_and_tracking.sql?raw'
 import migration0004 from './migrations/0004_archive_and_daily_stats.sql?raw'
+import migration0005 from './migrations/0005_clockwork_issue_key.sql?raw'
 
 const MIGRATIONS: { version: number; sql: string }[] = [
   { version: 1, sql: migration0001 },
   { version: 2, sql: migration0002 },
   { version: 3, sql: migration0003 },
-  { version: 4, sql: migration0004 }
+  { version: 4, sql: migration0004 },
+  { version: 5, sql: migration0005 }
 ]
 
 export type DrizzleDb = ReturnType<typeof drizzle>

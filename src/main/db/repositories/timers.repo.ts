@@ -174,6 +174,12 @@ export function markTimerLinkOpened(id: string): void {
   getDb().update(timers).set({ linkOpenedAt: now, updatedAt: now }).where(eq(timers.id, id)).run()
 }
 
+/** Set once the timer's time has been confirmed mirrored to Clockwork — drives the "logged
+ *  automatically" indicator in history. */
+export function markClockworkLogged(id: string): void {
+  getDb().update(timers).set({ clockworkLoggedAt: Date.now() }).where(eq(timers.id, id)).run()
+}
+
 export function toggleTimerLoggedConfirmed(id: string): void {
   const current = getDb().select({ loggedConfirmedAt: timers.loggedConfirmedAt }).from(timers).where(eq(timers.id, id)).get()
   if (!current) return

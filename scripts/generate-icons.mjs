@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
 
-const sizes = [16, 32, 48, 128, 256]
+const sizes = [16, 32, 48, 128, 256, 512]
 const root = resolve(import.meta.dirname, '..')
 
 function crc32(buffer) {
@@ -128,14 +128,26 @@ function encodeIco(images) {
 }
 
 const images = sizes.map((size) => ({ size, png: encodePng(size, renderIcon(size)) }))
+
+// ICO directory entries store width/height in a single byte (0 meaning 256), so anything above
+// 256 can't be represented — 512 is generated only for the Linux/tray PNGs below.
 const icoPath = resolve(root, 'build', 'icon.ico')
 await mkdir(dirname(icoPath), { recursive: true })
-await writeFile(icoPath, encodeIco(images))
+await writeFile(icoPath, encodeIco(images.filter(({ size }) => size <= 256)))
 
-for (const { size, png } of images.filter(({ size }) => size !== 256)) {
+for (const { size, png } of images.filter(({ size }) => size !== 256 && size !== 512)) {
   const iconPath = resolve(root, 'browser-extension', 'icons', `icon-${size}.png`)
   await mkdir(dirname(iconPath), { recursive: true })
   await writeFile(iconPath, png)
 }
 
-console.log('Generated Windows ICO and Chrome extension PNG icons.')
+// Linux packaging wants a single square PNG (512+ recommended) rather than an .ico.
+const linuxIcon = images.find(({ size }) => size === 512)
+await writeFile(resolve(root, 'build', 'icon.png'), linuxIcon.png)
+
+// A separate, smaller icon for the tray on non-Windows platforms (see tray.ts) — the taskbar-sized
+// .ico doesn't apply there, and a 512px source would look oversized/blurry once Electron scales it.
+const trayIcon = images.find(({ size }) => size === 32)
+await writeFile(resolve(root, 'build', 'tray-icon.png'), trayIcon.png)
+
+console.log('Generated Windows ICO, Linux/tray PNG icons, and Chrome extension PNG icons.')

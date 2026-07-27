@@ -1,4 +1,4 @@
-import { r as reactExports, f as formatDefaultTimerTitle, j as jsxRuntimeExports, P as PlusIcon, b as ClockPlusIcon, u as useToasts, d as ChevronDownIcon, T as ToastStack, L as LogsIcon, e as TimerRow, H as HistoryTimerRow, g as useElapsedMs, h as useStatusPulse, i as formatElapsedClock, c as client, R as React } from "./TimerRows-UXKhS_Fe.js";
+import { r as reactExports, f as formatDefaultTimerTitle, j as jsxRuntimeExports, P as PlusIcon, b as ClockPlusIcon, u as useToasts, d as ChevronDownIcon, T as ToastStack, L as LogsIcon, e as TimerRow, H as HistoryTimerRow, g as useElapsedMs, h as useStatusPulse, i as formatElapsedClock, c as client, R as React } from "./TimerRows-CHSHBSrZ.js";
 const BROWSER_PAGE_SIZE = 50;
 function sortTags(tags, view) {
   return [...tags].sort(
@@ -7,6 +7,25 @@ function sortTags(tags, view) {
 }
 function matchesQuery(query, title, url) {
   return !query || title.toLowerCase().includes(query) || url.toLowerCase().includes(query);
+}
+const ISSUE_KEY_PATTERN = /^[A-Z]{2,4}-\d+$/;
+const TITLE_STARTS_WITH_ISSUE_KEY = /^[A-Z]{2,4}-\d+\b/;
+function findIssueKeyInQueryParams(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  for (const value of parsed.searchParams.values()) {
+    if (ISSUE_KEY_PATTERN.test(value)) return value;
+  }
+  return null;
+}
+function withIssueKeyPrefix(title, url) {
+  if (TITLE_STARTS_WITH_ISSUE_KEY.test(title)) return title;
+  const issueKey = findIssueKeyInQueryParams(url);
+  return issueKey ? `${issueKey} ${title}` : title;
 }
 function PickerRow({ title, url, isFavorite, onPick, onToggleFavorite }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tag-picker__row--tag", children: [
@@ -80,8 +99,16 @@ function TagPicker({ value, onChange, onPickTag, placeholder }) {
   const visibleHistory = domainHistory.filter((item) => matchesQuery(query, item.title, item.url));
   const domainSuffix = domainFilter ? ` (${domainFilter})` : "";
   const allBrowserItems = [
-    ...visibleTabs.map((tab, index) => ({ key: `tab-${tab.url}-${index}`, title: tab.title, url: tab.url })),
-    ...visibleHistory.map((item) => ({ key: `history-${item.url}-${item.lastVisitTime}`, title: item.title, url: item.url }))
+    ...visibleTabs.map((tab, index) => ({
+      key: `tab-${tab.url}-${index}`,
+      title: withIssueKeyPrefix(tab.title, tab.url),
+      url: tab.url
+    })),
+    ...visibleHistory.map((item) => ({
+      key: `history-${item.url}-${item.lastVisitTime}`,
+      title: withIssueKeyPrefix(item.title, item.url),
+      url: item.url
+    }))
   ];
   const visibleBrowserItems = allBrowserItems.slice(0, browserPageCount);
   reactExports.useEffect(() => {
@@ -141,7 +168,7 @@ function TagPicker({ value, onChange, onPickTag, placeholder }) {
 }
 const DEFAULT_CUSTOM_LOG_HOURS = "0";
 const DEFAULT_CUSTOM_LOG_MINUTES = "15";
-function StartTimerForm({ onStart, onCreateCustomLog }) {
+function StartTimerForm({ onStart, onCreateCustomLog, clockworkSyncActive = false }) {
   const [text, setText] = reactExports.useState("");
   const [pickedTag, setPickedTag] = reactExports.useState(null);
   const [customLogOpen, setCustomLogOpen] = reactExports.useState(false);
@@ -193,9 +220,19 @@ function StartTimerForm({ onStart, onCreateCustomLog }) {
       setCustomLogOpen(false);
     }
   }
+  const willLogAutomatically = clockworkSyncActive && pickedTag?.clockworkIssueKey != null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "start-timer-form", onSubmit: handleSubmit, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(TagPicker, { value: text, onChange: handleChange, onPickTag: handlePickTag, placeholder: `Plain title (e.g. ${defaultTitlePreview}) or pick a tag…` }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", className: "icon-button icon-button--add", "aria-label": "Start timer", children: /* @__PURE__ */ jsxRuntimeExports.jsx(PlusIcon, {}) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "submit",
+        className: `icon-button icon-button--add${willLogAutomatically ? " icon-button--add-clockwork" : ""}`,
+        "aria-label": "Start timer",
+        title: willLogAutomatically ? "Can be logged automatically" : void 0,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(PlusIcon, {})
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "custom-log-popover-wrapper", ref: customLogRef, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
@@ -480,7 +517,14 @@ function App() {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "panel__body", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StartTimerForm, { onStart: handleStartFromPanel, onCreateCustomLog: handleCreateCustomLog }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        StartTimerForm,
+        {
+          onStart: handleStartFromPanel,
+          onCreateCustomLog: handleCreateCustomLog,
+          clockworkSyncActive: settings?.clockworkSyncEnabled ?? false
+        }
+      ),
       activeTimers.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "panel__section", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Active" }),
         activeTimers.map((timer) => /* @__PURE__ */ jsxRuntimeExports.jsx(

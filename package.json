@@ -1,7 +1,7 @@
 {
   "name": "time-tracking-helper",
-  "version": "1.0.3",
-  "description": "Personal Windows time-tracking overlay app",
+  "version": "2.1.0",
+  "description": "Personal time-tracking overlay app",
   "main": "./out/main/index.js",
   "author": "Time Tracker Contributors",
   "private": true,
@@ -11,9 +11,10 @@
     "start": "electron-vite preview",
     "generate:icons": "node scripts/generate-icons.mjs",
     "dist": "npm run generate:icons && npm run build && electron-builder --win nsis",
+    "dist:linux": "npm run generate:icons && npm run build && electron-builder --linux AppImage deb",
     "package:extension": "npm run generate:icons && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
     "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && npm run generate:icons",
     "test": "vitest run"
   },
   "build": {
@@ -40,6 +41,10 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "build/tray-icon.png",
+        "to": "tray-icon.png"
       }
     ],
     "win": {
@@ -62,6 +67,25 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "artifactName": "Time-Tracker-${version}.${ext}",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     }
   },
   "dependencies": {

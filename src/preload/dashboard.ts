@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppSettings,
   BrowserPairingInfo,
+  ClockworkStatus,
   CustomTimerLogInput,
   DockSide,
   DomainHistoryItem,
@@ -47,6 +48,8 @@ const api = {
       ipcRenderer.invoke('settings:setHighlightPausedTimers', value),
     setBrowserDomainFilter: (value: string): Promise<AppSettings> =>
       ipcRenderer.invoke('settings:setBrowserDomainFilter', value),
+    setClockworkSyncEnabled: (value: boolean): Promise<AppSettings> =>
+      ipcRenderer.invoke('settings:setClockworkSyncEnabled', value),
     onChanged: (callback: (settings: AppSettings) => void): (() => void) => {
       const listener = (_event: unknown, settings: AppSettings): void => callback(settings)
       ipcRenderer.on('settings:changed', listener)
@@ -64,6 +67,10 @@ const api = {
     searchHistoryByDomain: (): Promise<DomainHistoryItem[]> =>
       ipcRenderer.invoke('browser:searchHistoryByDomain'),
     getPairingInfo: (): Promise<BrowserPairingInfo> => ipcRenderer.invoke('browser:getPairingInfo')
+  },
+  clockwork: {
+    getStatus: (): Promise<ClockworkStatus> => ipcRenderer.invoke('clockwork:getStatus'),
+    setApiToken: (token: string): Promise<ClockworkStatus> => ipcRenderer.invoke('clockwork:setApiToken', token)
   }
 }
 

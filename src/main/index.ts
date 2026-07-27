@@ -1,11 +1,13 @@
 import { app } from 'electron'
 import { getDb } from './db/connection'
+import { backfillClockworkIssueKeys } from './db/repositories/tags.repo'
 import { registerTimerIpc } from './ipc/timers.ipc'
 import { registerTagsIpc } from './ipc/tags.ipc'
 import { registerSettingsIpc } from './ipc/settings.ipc'
 import { registerShellIpc } from './ipc/shell.ipc'
 import { registerBrowserIpc } from './ipc/browser.ipc'
 import { registerArchiveIpc } from './ipc/archive.ipc'
+import { registerClockworkIpc } from './ipc/clockwork.ipc'
 import { createOverlayWindow, registerOverlayIpc, applyDockSide, setActiveTimerCount } from './windows/overlayWindow'
 import { showDashboardWindow, registerDashboardIpc } from './windows/dashboardWindow'
 import { registerStatsWindowIpc } from './windows/statsWindow'
@@ -13,6 +15,7 @@ import { createTray, refreshTrayMenu } from './tray'
 import { getSnapshot, onTimersChanged } from './timerStore'
 import { startIdleMonitor } from './idleMonitor'
 import { startBrowserBridge } from './browserBridge'
+import { startClockworkSync } from './clockworkSync'
 import type { TimersSnapshot } from '@shared/types'
 
 function countActiveTimers(snapshot: TimersSnapshot): number {
@@ -32,6 +35,7 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     getDb()
+    backfillClockworkIssueKeys()
 
     registerTimerIpc()
     registerTagsIpc()
@@ -42,11 +46,13 @@ if (!gotSingleInstanceLock) {
     registerBrowserIpc()
     registerArchiveIpc()
     registerStatsWindowIpc()
+    registerClockworkIpc()
 
     createOverlayWindow()
     createTray()
     startIdleMonitor()
     startBrowserBridge()
+    startClockworkSync()
 
     setActiveTimerCount(countActiveTimers(getSnapshot()))
     onTimersChanged((snapshot) => {

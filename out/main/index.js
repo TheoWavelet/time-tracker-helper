@@ -73,11 +73,21 @@ FROM timers
 WHERE status = 'stopped' AND stopped_at IS NOT NULL
 GROUP BY day;
 `;
+const migration0005 = `-- Auto-derived from a tag's target_url (see tags.repo.ts deriveClockworkIssueKey) whenever a
+-- Jira-style issue key like "SSP-13" is found in it — lets timers tagged against a Jira issue
+-- sync their tracked time to Clockwork without any new manual data entry.
+ALTER TABLE tags ADD COLUMN clockwork_issue_key TEXT NULL;
+
+-- Set once a timer's tracked time has been successfully mirrored to Clockwork (drives the
+-- "logged automatically" indicator in history).
+ALTER TABLE timers ADD COLUMN clockwork_logged_at INTEGER NULL;
+`;
 const MIGRATIONS = [
   { version: 1, sql: migration0001 },
   { version: 2, sql: migration0002 },
   { version: 3, sql: migration0003 },
-  { version: 4, sql: migration0004 }
+  { version: 4, sql: migration0004 },
+  { version: 5, sql: migration0005 }
 ];
 let sqlite = null;
 let db = null;
@@ -115,6 +125,8 @@ const tags = sqliteCore.sqliteTable("tags", {
   targetUrl: sqliteCore.text("target_url"),
   isFavorite: sqliteCore.integer("is_favorite", { mode: "boolean" }).notNull(),
   archivedAt: sqliteCore.integer("archived_at"),
+  /** Auto-derived from targetUrl (see tags.repo.ts) — drives automatic Clockwork time sync. */
+  clockworkIssueKey: sqliteCore.text("clockwork_issue_key"),
   createdAt: sqliteCore.integer("created_at").notNull(),
   updatedAt: sqliteCore.integer("updated_at").notNull()
 });
@@ -136,6 +148,8 @@ const timers = sqliteCore.sqliteTable("timers", {
   linkOpenedAt: sqliteCore.integer("link_opened_at"),
   loggedConfirmedAt: sqliteCore.integer("logged_confirmed_at"),
   archivedAt: sqliteCore.integer("archived_at"),
+  /** Set once this timer's time has been successfully mirrored to Clockwork. */
+  clockworkLoggedAt: sqliteCore.integer("clockwork_logged_at"),
   createdAt: sqliteCore.integer("created_at").notNull(),
   updatedAt: sqliteCore.integer("updated_at").notNull()
 });
@@ -153,25 +167,118 @@ sqliteCore.sqliteTable("links", {
   icon: sqliteCore.text("icon"),
   createdAt: sqliteCore.integer("created_at").notNull()
 });
-function mapRow$1(row, tagLabel, tagTargetUrl) {
+const JIRA_ISSUE_KEY_PATTERN = /\b([A-Z][A-Z0-9]+-\d+)\b/;
+function deriveClockworkIssueKey(targetUrl) {
+  if (!targetUrl) return null;
+  const match = targetUrl.match(JIRA_ISSUE_KEY_PATTERN);
+  return match ? match[1] : null;
+}
+function mapRow$1(row) {
+  return {
+    id: row.id,
+    label: row.label,
+    targetUrl: row.targetUrl,
+    isFavorite: row.isFavorite,
+    clockworkIssueKey: row.clockworkIssueKey,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
+}
+function listTags$1() {
+  const rows = getDb().select().from(tags).where(drizzleOrm.isNull(tags.archivedAt)).orderBy(drizzleOrm.desc(tags.isFavorite), tags.label).all();
+  return rows.map(mapRow$1);
+}
+function listTagsForPicker$1() {
+  const rows = getDb().select({
+    id: tags.id,
+    label: tags.label,
+    targetUrl: tags.targetUrl,
+    isFavorite: tags.isFavorite,
+    clockworkIssueKey: tags.clockworkIssueKey,
+    createdAt: tags.createdAt,
+    updatedAt: tags.updatedAt,
+    usageCount: drizzleOrm.count(timers.id),
+    lastUsedAt: drizzleOrm.max(timers.updatedAt)
+  }).from(tags).leftJoin(timers, drizzleOrm.eq(timers.tagId, tags.id)).where(drizzleOrm.isNull(tags.archivedAt)).groupBy(tags.id).orderBy(drizzleOrm.desc(tags.isFavorite), tags.label).all();
+  return rows.map((row) => ({ ...row, lastUsedAt: row.lastUsedAt ?? null }));
+}
+function findTagByLabel(label) {
+  const row = getDb().select().from(tags).where(drizzleOrm.and(drizzleOrm.eq(tags.label, label), drizzleOrm.isNull(tags.archivedAt))).get();
+  return row ? mapRow$1(row) : null;
+}
+function findTagById(id) {
+  const row = getDb().select().from(tags).where(drizzleOrm.eq(tags.id, id)).get();
+  return row ? mapRow$1(row) : null;
+}
+function findOrCreateTagByLabel(label) {
+  const trimmed = label.trim();
+  const existing = findTagByLabel(trimmed);
+  if (existing) return existing;
+  const now = Date.now();
+  const id = node_crypto.randomUUID();
+  getDb().insert(tags).values({ id, label: trimmed, targetUrl: null, isFavorite: false, clockworkIssueKey: null, createdAt: now, updatedAt: now }).run();
+  return { id, label: trimmed, targetUrl: null, isFavorite: false, clockworkIssueKey: null, createdAt: now, updatedAt: now };
+}
+function findOrCreateTagByLabelAndUrl$1(label, url) {
+  const trimmedLabel = label.trim();
+  const trimmedUrl = url.trim();
+  const existing = findTagByLabel(trimmedLabel);
+  if (existing) {
+    if (!existing.targetUrl) {
+      getDb().update(tags).set({ targetUrl: trimmedUrl, clockworkIssueKey: deriveClockworkIssueKey(trimmedUrl), updatedAt: Date.now() }).where(drizzleOrm.eq(tags.id, existing.id)).run();
+    }
+  } else {
+    const now = Date.now();
+    getDb().insert(tags).values({
+      id: node_crypto.randomUUID(),
+      label: trimmedLabel,
+      targetUrl: trimmedUrl,
+      isFavorite: false,
+      clockworkIssueKey: deriveClockworkIssueKey(trimmedUrl),
+      createdAt: now,
+      updatedAt: now
+    }).run();
+  }
+  const picked = listTagsForPicker$1().find((tag) => tag.label === trimmedLabel);
+  if (!picked) throw new Error("Tag disappeared immediately after creation");
+  return picked;
+}
+function toggleTagFavorite$1(id) {
+  const current = getDb().select({ isFavorite: tags.isFavorite }).from(tags).where(drizzleOrm.eq(tags.id, id)).get();
+  if (!current) throw new Error(`Tag ${id} not found`);
+  getDb().update(tags).set({ isFavorite: !current.isFavorite, updatedAt: Date.now() }).where(drizzleOrm.eq(tags.id, id)).run();
+  const updated = listTagsForPicker$1().find((tag) => tag.id === id);
+  if (!updated) throw new Error("Tag disappeared immediately after update");
+  return updated;
+}
+function backfillClockworkIssueKeys() {
+  const rows = getDb().select({ id: tags.id, targetUrl: tags.targetUrl }).from(tags).where(drizzleOrm.and(drizzleOrm.isNull(tags.clockworkIssueKey))).all();
+  for (const row of rows) {
+    const derived = deriveClockworkIssueKey(row.targetUrl);
+    if (derived) {
+      getDb().update(tags).set({ clockworkIssueKey: derived }).where(drizzleOrm.eq(tags.id, row.id)).run();
+    }
+  }
+}
+function mapRow(row, tagLabel, tagTargetUrl) {
   return { ...row, tagLabel, tagTargetUrl };
 }
 const timerWithTag = { timer: timers, tagLabel: tags.label, tagTargetUrl: tags.targetUrl };
 function listTimers() {
   const rows = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.isNull(timers.archivedAt)).orderBy(drizzleOrm.desc(timers.startedAt)).all();
-  return rows.map((row) => mapRow$1(row.timer, row.tagLabel, row.tagTargetUrl));
+  return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl));
 }
 function listArchivedTimers$1() {
   const rows = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.isNotNull(timers.archivedAt)).orderBy(drizzleOrm.desc(timers.archivedAt)).all();
-  return rows.map((row) => mapRow$1(row.timer, row.tagLabel, row.tagTargetUrl));
+  return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl));
 }
 function findRunningTimer() {
   const row = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.eq(timers.status, "running")).get();
-  return row ? mapRow$1(row.timer, row.tagLabel, row.tagTargetUrl) : null;
+  return row ? mapRow(row.timer, row.tagLabel, row.tagTargetUrl) : null;
 }
 function findTimerById(id) {
   const row = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.eq(timers.id, id)).get();
-  return row ? mapRow$1(row.timer, row.tagLabel, row.tagTargetUrl) : null;
+  return row ? mapRow(row.timer, row.tagLabel, row.tagTargetUrl) : null;
 }
 function insertTimer(input) {
   const now = Date.now();
@@ -243,6 +350,9 @@ function markTimerLinkOpened$1(id) {
   const now = Date.now();
   getDb().update(timers).set({ linkOpenedAt: now, updatedAt: now }).where(drizzleOrm.eq(timers.id, id)).run();
 }
+function markClockworkLogged(id) {
+  getDb().update(timers).set({ clockworkLoggedAt: Date.now() }).where(drizzleOrm.eq(timers.id, id)).run();
+}
 function toggleTimerLoggedConfirmed$1(id) {
   const current = getDb().select({ loggedConfirmedAt: timers.loggedConfirmedAt }).from(timers).where(drizzleOrm.eq(timers.id, id)).get();
   if (!current) return;
@@ -263,70 +373,6 @@ function archiveTimerRow(id) {
 }
 function clearArchive$1() {
   getDb().delete(timers).where(drizzleOrm.isNotNull(timers.archivedAt)).run();
-}
-function mapRow(row) {
-  return {
-    id: row.id,
-    label: row.label,
-    targetUrl: row.targetUrl,
-    isFavorite: row.isFavorite,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt
-  };
-}
-function listTags$1() {
-  const rows = getDb().select().from(tags).where(drizzleOrm.isNull(tags.archivedAt)).orderBy(drizzleOrm.desc(tags.isFavorite), tags.label).all();
-  return rows.map(mapRow);
-}
-function listTagsForPicker$1() {
-  const rows = getDb().select({
-    id: tags.id,
-    label: tags.label,
-    targetUrl: tags.targetUrl,
-    isFavorite: tags.isFavorite,
-    createdAt: tags.createdAt,
-    updatedAt: tags.updatedAt,
-    usageCount: drizzleOrm.count(timers.id),
-    lastUsedAt: drizzleOrm.max(timers.updatedAt)
-  }).from(tags).leftJoin(timers, drizzleOrm.eq(timers.tagId, tags.id)).where(drizzleOrm.isNull(tags.archivedAt)).groupBy(tags.id).orderBy(drizzleOrm.desc(tags.isFavorite), tags.label).all();
-  return rows.map((row) => ({ ...row, lastUsedAt: row.lastUsedAt ?? null }));
-}
-function findTagByLabel(label) {
-  const row = getDb().select().from(tags).where(drizzleOrm.and(drizzleOrm.eq(tags.label, label), drizzleOrm.isNull(tags.archivedAt))).get();
-  return row ? mapRow(row) : null;
-}
-function findOrCreateTagByLabel(label) {
-  const trimmed = label.trim();
-  const existing = findTagByLabel(trimmed);
-  if (existing) return existing;
-  const now = Date.now();
-  const id = node_crypto.randomUUID();
-  getDb().insert(tags).values({ id, label: trimmed, targetUrl: null, isFavorite: false, createdAt: now, updatedAt: now }).run();
-  return { id, label: trimmed, targetUrl: null, isFavorite: false, createdAt: now, updatedAt: now };
-}
-function findOrCreateTagByLabelAndUrl$1(label, url) {
-  const trimmedLabel = label.trim();
-  const trimmedUrl = url.trim();
-  const existing = findTagByLabel(trimmedLabel);
-  if (existing) {
-    if (!existing.targetUrl) {
-      getDb().update(tags).set({ targetUrl: trimmedUrl, updatedAt: Date.now() }).where(drizzleOrm.eq(tags.id, existing.id)).run();
-    }
-  } else {
-    const now = Date.now();
-    getDb().insert(tags).values({ id: node_crypto.randomUUID(), label: trimmedLabel, targetUrl: trimmedUrl, isFavorite: false, createdAt: now, updatedAt: now }).run();
-  }
-  const picked = listTagsForPicker$1().find((tag) => tag.label === trimmedLabel);
-  if (!picked) throw new Error("Tag disappeared immediately after creation");
-  return picked;
-}
-function toggleTagFavorite$1(id) {
-  const current = getDb().select({ isFavorite: tags.isFavorite }).from(tags).where(drizzleOrm.eq(tags.id, id)).get();
-  if (!current) throw new Error(`Tag ${id} not found`);
-  getDb().update(tags).set({ isFavorite: !current.isFavorite, updatedAt: Date.now() }).where(drizzleOrm.eq(tags.id, id)).run();
-  const updated = listTagsForPicker$1().find((tag) => tag.id === id);
-  if (!updated) throw new Error("Tag disappeared immediately after update");
-  return updated;
 }
 function addTrackedMs(dateKey, ms) {
   const now = Date.now();
@@ -381,6 +427,138 @@ function getWeeklyStats(now = Date.now()) {
   const dailyAverageMs = totalMs / Math.max(1, elapsedDays);
   return { days, totalMs, dailyAverageMs };
 }
+const store$1 = new Store({ name: "clockwork-credentials" });
+function getClockworkApiToken() {
+  return store$1.get("apiToken") ?? null;
+}
+function setClockworkApiToken(token) {
+  const trimmed = token.trim();
+  if (trimmed) store$1.set("apiToken", trimmed);
+  else store$1.delete("apiToken");
+}
+function hasClockworkApiToken() {
+  return getClockworkApiToken() != null;
+}
+const CLOCKWORK_API_BASE = "https://api.clockwork.report/v1";
+const REQUEST_TIMEOUT_MS$1 = 8e3;
+async function callClockwork(path2, issueKey) {
+  const token = getClockworkApiToken();
+  if (!token) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS$1);
+  try {
+    const response = await fetch(`${CLOCKWORK_API_BASE}${path2}?issue_key=${encodeURIComponent(issueKey)}`, {
+      method: "POST",
+      headers: { Authorization: `Token ${token}` },
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      console.error(`Clockwork API ${path2} failed for ${issueKey}: HTTP ${response.status}`);
+    }
+    return response.ok;
+  } catch (error) {
+    console.error(`Clockwork API ${path2} failed for ${issueKey}`, error);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+function startClockworkTimer(issueKey) {
+  return callClockwork("/start_timer", issueKey);
+}
+function stopClockworkTimer(issueKey) {
+  return callClockwork("/stop_timer", issueKey);
+}
+const defaults = {
+  dockSide: "right",
+  dockYOffset: null,
+  highlightPausedTimers: false,
+  browserDomainFilter: "atlassian.net",
+  // Off by default even once a token is set — this pushes real time entries to a shared work
+  // system, so it should be a deliberate opt-in rather than switching on the moment a token exists.
+  clockworkSyncEnabled: false
+};
+const store = new Store({ defaults });
+function getSettings() {
+  return {
+    dockSide: store.get("dockSide"),
+    dockYOffset: store.get("dockYOffset"),
+    highlightPausedTimers: store.get("highlightPausedTimers"),
+    browserDomainFilter: store.get("browserDomainFilter"),
+    clockworkSyncEnabled: store.get("clockworkSyncEnabled")
+  };
+}
+function setDockSide(dockSide) {
+  store.set("dockSide", dockSide);
+  return getSettings();
+}
+function setDockYOffset(dockYOffset) {
+  store.set("dockYOffset", dockYOffset);
+  return getSettings();
+}
+function setHighlightPausedTimers(value) {
+  store.set("highlightPausedTimers", value);
+  return getSettings();
+}
+function setBrowserDomainFilter(value) {
+  store.set("browserDomainFilter", value.trim());
+  return getSettings();
+}
+function setClockworkSyncEnabled(value) {
+  store.set("clockworkSyncEnabled", value);
+  return getSettings();
+}
+const activeMirrors = /* @__PURE__ */ new Map();
+function isSyncActive() {
+  return getSettings().clockworkSyncEnabled && hasClockworkApiToken();
+}
+function resolveIssueKey(tagId) {
+  if (!tagId) return null;
+  return findTagById(tagId)?.clockworkIssueKey ?? null;
+}
+async function notifyTimerRunning(timerId, tagId) {
+  if (!isSyncActive()) return;
+  const issueKey = resolveIssueKey(tagId);
+  if (!issueKey) return;
+  const ok = await startClockworkTimer(issueKey);
+  if (ok) activeMirrors.set(issueKey, timerId);
+}
+async function notifyTimerSegmentEnded(tagId) {
+  const issueKey = resolveIssueKey(tagId);
+  if (!issueKey || !activeMirrors.has(issueKey)) return;
+  activeMirrors.delete(issueKey);
+  await stopClockworkTimer(issueKey);
+}
+async function notifyTimerSaved(tagId) {
+  if (!isSyncActive()) return false;
+  const issueKey = resolveIssueKey(tagId);
+  if (!issueKey) return false;
+  activeMirrors.delete(issueKey);
+  return stopClockworkTimer(issueKey);
+}
+async function stopAllActiveMirrors() {
+  const issueKeys = Array.from(activeMirrors.keys());
+  activeMirrors.clear();
+  await Promise.all(issueKeys.map((key) => stopClockworkTimer(key)));
+}
+async function reconcileOnStartup() {
+  if (!isSyncActive()) return;
+  const running = listTimers().find((t) => t.status === "running");
+  if (!running) return;
+  await notifyTimerRunning(running.id, running.tagId);
+}
+function startClockworkSync() {
+  void reconcileOnStartup();
+  let quitting = false;
+  electron.app.on("before-quit", (event) => {
+    if (quitting || activeMirrors.size === 0) return;
+    event.preventDefault();
+    quitting = true;
+    void stopAllActiveMirrors().finally(() => electron.app.quit());
+  });
+  electron.powerMonitor.on("suspend", () => void stopAllActiveMirrors());
+  electron.powerMonitor.on("lock-screen", () => void stopAllActiveMirrors());
+}
 function formatDefaultTimerTitle(startedAt) {
   const d = new Date(startedAt);
   const pad = (n) => n.toString().padStart(2, "0");
@@ -404,10 +582,12 @@ function startTimer(input) {
   const sqlite2 = getRawSqlite();
   const now = Date.now();
   const title = input.title?.trim() || formatDefaultTimerTitle(now);
+  let previousRunningTagId;
   const newId = sqlite2.transaction(() => {
     const running = findRunningTimer();
     if (running) {
       pauseTimerRow(running.id, "switched", title);
+      previousRunningTagId = running.tagId;
     }
     const tagId = input.tagLabel?.trim() ? findOrCreateTagByLabel(input.tagLabel).id : null;
     const id = node_crypto.randomUUID();
@@ -417,6 +597,8 @@ function startTimer(input) {
   emitChange();
   const created = findTimerById(newId);
   if (!created) throw new Error("Timer disappeared immediately after creation");
+  if (previousRunningTagId !== void 0) void notifyTimerSegmentEnded(previousRunningTagId);
+  void notifyTimerRunning(created.id, created.tagId);
   return created;
 }
 function createCustomTimerLog(input) {
@@ -445,24 +627,33 @@ function createCustomTimerLog(input) {
   return created;
 }
 function pauseTimer(id) {
+  const timer = findTimerById(id);
   pauseTimerRow(id, "manual", null);
   emitChange();
+  void notifyTimerSegmentEnded(timer?.tagId ?? null);
 }
 function pauseTimerForIdle(id, endAt) {
+  const timer = findTimerById(id);
   pauseTimerRow(id, "idle", null, endAt);
   emitChange();
+  void notifyTimerSegmentEnded(timer?.tagId ?? null);
 }
 function resumeTimer(id) {
   const sqlite2 = getRawSqlite();
-  sqlite2.transaction(() => {
+  let previousRunningTagId;
+  const target = sqlite2.transaction(() => {
     const running = findRunningTimer();
-    const target = findTimerById(id);
+    const target2 = findTimerById(id);
     if (running && running.id !== id) {
-      pauseTimerRow(running.id, "switched", target?.title ?? null);
+      pauseTimerRow(running.id, "switched", target2?.title ?? null);
+      previousRunningTagId = running.tagId;
     }
     resumeTimerRow(id);
+    return target2;
   })();
   emitChange();
+  if (previousRunningTagId !== void 0) void notifyTimerSegmentEnded(previousRunningTagId);
+  void notifyTimerRunning(id, target?.tagId ?? null);
 }
 function stopTimer(id) {
   stopTimerRow(id);
@@ -471,6 +662,14 @@ function stopTimer(id) {
     recordTrackedTime(stopped.stoppedAt, stopped.accumulatedMs);
   }
   emitChange();
+  if (stopped) {
+    void notifyTimerSaved(stopped.tagId).then((logged) => {
+      if (logged) {
+        markClockworkLogged(id);
+        emitChange();
+      }
+    });
+  }
 }
 function deleteTimer(id) {
   archiveTimerRow(id);
@@ -543,37 +742,6 @@ function registerTagsIpc() {
   );
   electron.ipcMain.handle("tags:toggleFavorite", (_event, id) => toggleTagFavorite(id));
 }
-const defaults = {
-  dockSide: "right",
-  dockYOffset: null,
-  highlightPausedTimers: false,
-  browserDomainFilter: "atlassian.net"
-};
-const store = new Store({ defaults });
-function getSettings() {
-  return {
-    dockSide: store.get("dockSide"),
-    dockYOffset: store.get("dockYOffset"),
-    highlightPausedTimers: store.get("highlightPausedTimers"),
-    browserDomainFilter: store.get("browserDomainFilter")
-  };
-}
-function setDockSide(dockSide) {
-  store.set("dockSide", dockSide);
-  return getSettings();
-}
-function setDockYOffset(dockYOffset) {
-  store.set("dockYOffset", dockYOffset);
-  return getSettings();
-}
-function setHighlightPausedTimers(value) {
-  store.set("highlightPausedTimers", value);
-  return getSettings();
-}
-function setBrowserDomainFilter(value) {
-  store.set("browserDomainFilter", value.trim());
-  return getSettings();
-}
 function broadcastSettings() {
   const settings = getSettings();
   for (const win of electron.BrowserWindow.getAllWindows()) {
@@ -595,6 +763,11 @@ function registerSettingsIpc(onDockSideChange) {
   });
   electron.ipcMain.handle("settings:setBrowserDomainFilter", (_event, value) => {
     const updated = setBrowserDomainFilter(value);
+    broadcastSettings();
+    return updated;
+  });
+  electron.ipcMain.handle("settings:setClockworkSyncEnabled", (_event, value) => {
+    const updated = setClockworkSyncEnabled(value);
     broadcastSettings();
     return updated;
   });
@@ -711,6 +884,13 @@ function registerArchiveIpc() {
   electron.ipcMain.handle("archive:list", () => listArchivedTimers());
   electron.ipcMain.handle("archive:clear", () => clearArchive());
   electron.ipcMain.handle("stats:getWeekly", () => getWeeklyStats());
+}
+function registerClockworkIpc() {
+  electron.ipcMain.handle("clockwork:getStatus", () => ({ hasToken: hasClockworkApiToken() }));
+  electron.ipcMain.handle("clockwork:setApiToken", (_event, token) => {
+    setClockworkApiToken(token);
+    return { hasToken: hasClockworkApiToken() };
+  });
 }
 const BAR_WIDTH = 88;
 const BAR_WIDE_WIDTH = BAR_WIDTH * 4;
@@ -979,7 +1159,8 @@ function registerStatsWindowIpc() {
 }
 let tray = null;
 function createTrayIcon() {
-  const iconPath = electron.app.isPackaged ? path.join(process.resourcesPath, "icon.ico") : path.join(electron.app.getAppPath(), "build", "icon.ico");
+  const filename = process.platform === "win32" ? "icon.ico" : "tray-icon.png";
+  const iconPath = electron.app.isPackaged ? path.join(process.resourcesPath, filename) : path.join(electron.app.getAppPath(), "build", filename);
   return electron.nativeImage.createFromPath(iconPath);
 }
 function createTray() {
@@ -1039,6 +1220,7 @@ if (!gotSingleInstanceLock) {
   });
   electron.app.whenReady().then(() => {
     getDb();
+    backfillClockworkIssueKeys();
     registerTimerIpc();
     registerTagsIpc();
     registerSettingsIpc(applyDockSide);
@@ -1048,10 +1230,12 @@ if (!gotSingleInstanceLock) {
     registerBrowserIpc();
     registerArchiveIpc();
     registerStatsWindowIpc();
+    registerClockworkIpc();
     createOverlayWindow();
     createTray();
     startIdleMonitor();
     startBrowserBridge();
+    startClockworkSync();
     setActiveTimerCount(countActiveTimers(getSnapshot()));
     onTimersChanged((snapshot) => {
       refreshTrayMenu();

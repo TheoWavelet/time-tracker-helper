@@ -12,6 +12,8 @@ export const tags = sqliteTable('tags', {
   targetUrl: text('target_url'),
   isFavorite: integer('is_favorite', { mode: 'boolean' }).notNull(),
   archivedAt: integer('archived_at'),
+  /** Auto-derived from targetUrl (see tags.repo.ts) — drives automatic Clockwork time sync. */
+  clockworkIssueKey: text('clockwork_issue_key'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull()
 })
@@ -34,6 +36,8 @@ export const timers = sqliteTable('timers', {
   linkOpenedAt: integer('link_opened_at'),
   loggedConfirmedAt: integer('logged_confirmed_at'),
   archivedAt: integer('archived_at'),
+  /** Set once this timer's time has been successfully mirrored to Clockwork. */
+  clockworkLoggedAt: integer('clockwork_logged_at'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull()
 })

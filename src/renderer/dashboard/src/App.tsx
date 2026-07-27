@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AppSettings, BrowserPairingInfo, DockSide, TimersSnapshot } from '@shared/types'
+import type { AppSettings, BrowserPairingInfo, ClockworkStatus, DockSide, TimersSnapshot } from '@shared/types'
 import { StartTimerForm, type StartTimerFormValue } from '../../components/TimerStarter'
 import { HistoryTimerRow, TimerRow } from '../../components/TimerRows'
 import { ChartIcon, GearIcon, ToastStack, TrashIcon, useToasts } from '../../components/ui'
@@ -16,6 +16,8 @@ export function App(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [pairingInfo, setPairingInfo] = useState<BrowserPairingInfo | null>(null)
   const [domainFilterInput, setDomainFilterInput] = useState('')
+  const [clockworkStatus, setClockworkStatus] = useState<ClockworkStatus | null>(null)
+  const [clockworkTokenInput, setClockworkTokenInput] = useState('')
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const pendingDeleteTimers = useRef(new Map<string, number>())
@@ -63,6 +65,10 @@ export function App(): JSX.Element {
     return () => window.clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    window.api.clockwork.getStatus().then(setClockworkStatus)
+  }, [])
+
   function handleCopyPairingToken(): void {
     if (!pairingInfo) return
     navigator.clipboard.writeText(pairingInfo.token)
@@ -82,6 +88,25 @@ export function App(): JSX.Element {
 
   function handleDownloadExtension(): void {
     window.api.shell.openExternal(EXTENSION_DOWNLOAD_URL)
+  }
+
+  async function handleSaveClockworkToken(): Promise<void> {
+    if (!clockworkTokenInput.trim()) return
+    const updated = await window.api.clockwork.setApiToken(clockworkTokenInput)
+    setClockworkStatus(updated)
+    setClockworkTokenInput('')
+    pushToast('Saved Clockwork API token')
+  }
+
+  async function handleClearClockworkToken(): Promise<void> {
+    const updated = await window.api.clockwork.setApiToken('')
+    setClockworkStatus(updated)
+    pushToast('Cleared Clockwork API token')
+  }
+
+  async function handleToggleClockworkSync(): Promise<void> {
+    const updated = await window.api.settings.setClockworkSyncEnabled(!settings?.clockworkSyncEnabled)
+    setSettings(updated)
   }
 
   async function commitDomainFilter(): Promise<void> {
@@ -309,6 +334,42 @@ export function App(): JSX.Element {
                     Download extension (.zip)
                   </button>
                 </div>
+              </div>
+
+              <div className="settings-popover__divider" />
+
+              <div className="settings-popover__group">
+                <span className="settings-popover__label">Clockwork</span>
+                <label className="setting-toggle">
+                  <input type="checkbox" checked={settings?.clockworkSyncEnabled ?? false} onChange={handleToggleClockworkSync} />
+                  Log time to Clockwork automatically
+                </label>
+                <div className="browser-pairing">
+                  <span className={`browser-pairing__dot${clockworkStatus?.hasToken ? ' is-connected' : ''}`} />
+                  <span>{clockworkStatus?.hasToken ? 'API token set' : 'No API token set'}</span>
+                </div>
+                <div className="browser-pairing__token-row">
+                  <input
+                    type="password"
+                    className="clockwork-token-input"
+                    value={clockworkTokenInput}
+                    onChange={(e) => setClockworkTokenInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveClockworkToken()}
+                    placeholder="Paste Clockwork API token"
+                  />
+                  <button type="button" onClick={handleSaveClockworkToken} disabled={!clockworkTokenInput.trim()}>
+                    Save
+                  </button>
+                  {clockworkStatus?.hasToken && (
+                    <button type="button" onClick={handleClearClockworkToken}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="app__empty">
+                  Applies automatically to any timer tagged with a Jira issue link (e.g. “.../browse/SSP-13”) —
+                  no per-tag setup needed.
+                </p>
               </div>
             </div>
             )}

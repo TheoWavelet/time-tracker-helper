@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, k as formatDurationHuman, a as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-UXKhS_Fe.js";
+import { r as reactExports, j as jsxRuntimeExports, k as formatDurationHuman, a as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-CHSHBSrZ.js";
 function App() {
   const [weeklyStats, setWeeklyStats] = reactExports.useState(null);
   const [archived, setArchived] = reactExports.useState(null);

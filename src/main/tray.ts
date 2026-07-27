@@ -6,9 +6,10 @@ import { getSnapshot, pauseTimer } from './timerStore'
 let tray: Tray | null = null
 
 function createTrayIcon(): Electron.NativeImage {
-  const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'icon.ico')
-    : path.join(app.getAppPath(), 'build', 'icon.ico')
+  // Windows wants the multi-resolution .ico; everywhere else (Linux, macOS) uses the dedicated
+  // small PNG instead — a single 512px source would look oversized once Electron scales it down.
+  const filename = process.platform === 'win32' ? 'icon.ico' : 'tray-icon.png'
+  const iconPath = app.isPackaged ? path.join(process.resourcesPath, filename) : path.join(app.getAppPath(), 'build', filename)
   return nativeImage.createFromPath(iconPath)
 }
 

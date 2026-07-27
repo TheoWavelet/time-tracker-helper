@@ -1,4 +1,4 @@
-import { r as reactExports, u as useToasts, j as jsxRuntimeExports, T as ToastStack, C as ChartIcon, G as GearIcon, a as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-UXKhS_Fe.js";
+import { r as reactExports, u as useToasts, j as jsxRuntimeExports, T as ToastStack, C as ChartIcon, G as GearIcon, a as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-CHSHBSrZ.js";
 function startOfDay(timestamp) {
   const d = new Date(timestamp);
   d.setHours(0, 0, 0, 0);
@@ -29,11 +29,15 @@ function groupHistory(timers, now) {
 }
 const PAIRING_POLL_INTERVAL_MS = 1500;
 const UNDO_DELETE_WINDOW_MS = 5e3;
+const CHROME_EXTENSIONS_URL = "chrome://extensions/";
+const EXTENSION_DOWNLOAD_URL = "https://drive.google.com/drive/u/1/folders/1Jg0-a5bE0InWvpB-xyORBsQWbTrqhASP";
 function App() {
   const [snapshot, setSnapshot] = reactExports.useState(null);
   const [settings, setSettings] = reactExports.useState(null);
   const [pairingInfo, setPairingInfo] = reactExports.useState(null);
   const [domainFilterInput, setDomainFilterInput] = reactExports.useState("");
+  const [clockworkStatus, setClockworkStatus] = reactExports.useState(null);
+  const [clockworkTokenInput, setClockworkTokenInput] = reactExports.useState("");
   const [pendingDeleteIds, setPendingDeleteIds] = reactExports.useState(/* @__PURE__ */ new Set());
   const [settingsOpen, setSettingsOpen] = reactExports.useState(false);
   const pendingDeleteTimers = reactExports.useRef(/* @__PURE__ */ new Map());
@@ -75,10 +79,40 @@ function App() {
     }, PAIRING_POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, []);
+  reactExports.useEffect(() => {
+    window.api.clockwork.getStatus().then(setClockworkStatus);
+  }, []);
   function handleCopyPairingToken() {
     if (!pairingInfo) return;
     navigator.clipboard.writeText(pairingInfo.token);
     pushToast("Copied pairing token");
+  }
+  function handleOpenChromeExtensions() {
+    window.api.shell.openExternal(CHROME_EXTENSIONS_URL).catch(() => {
+    });
+  }
+  function handleCopyChromeExtensionsLink() {
+    navigator.clipboard.writeText(CHROME_EXTENSIONS_URL);
+    pushToast("Copied chrome://extensions/ link");
+  }
+  function handleDownloadExtension() {
+    window.api.shell.openExternal(EXTENSION_DOWNLOAD_URL);
+  }
+  async function handleSaveClockworkToken() {
+    if (!clockworkTokenInput.trim()) return;
+    const updated = await window.api.clockwork.setApiToken(clockworkTokenInput);
+    setClockworkStatus(updated);
+    setClockworkTokenInput("");
+    pushToast("Saved Clockwork API token");
+  }
+  async function handleClearClockworkToken() {
+    const updated = await window.api.clockwork.setApiToken("");
+    setClockworkStatus(updated);
+    pushToast("Cleared Clockwork API token");
+  }
+  async function handleToggleClockworkSync() {
+    const updated = await window.api.settings.setClockworkSyncEnabled(!settings?.clockworkSyncEnabled);
+    setSettings(updated);
   }
   async function commitDomainFilter() {
     const updated = await window.api.settings.setBrowserDomainFilter(domainFilterInput);
@@ -255,7 +289,51 @@ function App() {
                     placeholder: "atlassian.net"
                   }
                 )
-              ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "extension-guide__steps", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Download the extension below and unzip it." }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+                  "Open ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "chrome://extensions" }),
+                  " and turn on Developer mode."
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Click “Load unpacked” and select the unzipped folder." }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Paste the pairing token above into the extension’s options page." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "browser-pairing__token-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "browser-pairing__token", children: "chrome://extensions/" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenChromeExtensions, children: "Open" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleCopyChromeExtensionsLink, children: "Copy" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "browser-pairing__token-row", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleDownloadExtension, children: "Download extension (.zip)" }) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "settings-popover__divider" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-popover__group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "settings-popover__label", children: "Clockwork" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "setting-toggle", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: settings?.clockworkSyncEnabled ?? false, onChange: handleToggleClockworkSync }),
+                "Log time to Clockwork automatically"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "browser-pairing", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `browser-pairing__dot${clockworkStatus?.hasToken ? " is-connected" : ""}` }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: clockworkStatus?.hasToken ? "API token set" : "No API token set" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "browser-pairing__token-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "password",
+                    className: "clockwork-token-input",
+                    value: clockworkTokenInput,
+                    onChange: (e) => setClockworkTokenInput(e.target.value),
+                    onKeyDown: (e) => e.key === "Enter" && handleSaveClockworkToken(),
+                    placeholder: "Paste Clockwork API token"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleSaveClockworkToken, disabled: !clockworkTokenInput.trim(), children: "Save" }),
+                clockworkStatus?.hasToken && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearClockworkToken, children: "Clear" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "app__empty", children: "Applies automatically to any timer tagged with a Jira issue link (e.g. “.../browse/SSP-13”) — no per-tag setup needed." })
             ] })
           ] })
         ] })
