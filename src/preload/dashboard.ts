@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppSettings,
   BrowserPairingInfo,
+  CustomTimerLogInput,
   DockSide,
   DomainHistoryItem,
   OpenTabInfo,
@@ -16,11 +17,16 @@ const api = {
   timers: {
     getSnapshot: (): Promise<TimersSnapshot> => ipcRenderer.invoke('timers:getSnapshot'),
     start: (input: StartTimerInput): Promise<TimerDTO> => ipcRenderer.invoke('timers:start', input),
+    createCustomLog: (input: CustomTimerLogInput): Promise<TimerDTO> => ipcRenderer.invoke('timers:createCustomLog', input),
     pause: (id: string) => ipcRenderer.invoke('timers:pause', id),
     resume: (id: string) => ipcRenderer.invoke('timers:resume', id),
     stop: (id: string) => ipcRenderer.invoke('timers:stop', id),
     delete: (id: string) => ipcRenderer.invoke('timers:delete', id),
     updateTitle: (id: string, title: string) => ipcRenderer.invoke('timers:updateTitle', { id, title }),
+    markLinkOpened: (id: string): Promise<void> => ipcRenderer.invoke('timers:markLinkOpened', id),
+    toggleLoggedConfirmed: (id: string): Promise<void> => ipcRenderer.invoke('timers:toggleLoggedConfirmed', id),
+    setLoggedConfirmed: (ids: string[], confirmed: boolean): Promise<void> =>
+      ipcRenderer.invoke('timers:setLoggedConfirmed', ids, confirmed),
     onChanged: (callback: (snapshot: TimersSnapshot) => void): (() => void) => {
       const listener = (_event: unknown, snapshot: TimersSnapshot): void => callback(snapshot)
       ipcRenderer.on('timers:changed', listener)
@@ -49,6 +55,9 @@ const api = {
   },
   shell: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url)
+  },
+  app: {
+    openStats: (): Promise<void> => ipcRenderer.invoke('stats:show')
   },
   browser: {
     listOpenTabs: (): Promise<OpenTabInfo[]> => ipcRenderer.invoke('browser:listOpenTabs'),

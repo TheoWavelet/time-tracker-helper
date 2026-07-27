@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { getDb } from '../connection'
 import { tags, timers } from '../schema'
 import type { TimerDTO, TimerKind } from '@shared/types'
@@ -16,7 +16,20 @@ export function listTimers(): TimerDTO[] {
     .select(timerWithTag)
     .from(timers)
     .leftJoin(tags, eq(tags.id, timers.tagId))
+    .where(isNull(timers.archivedAt))
     .orderBy(desc(timers.startedAt))
+    .all()
+  return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl))
+}
+
+/** Timers deleted from history — soft-deleted, so they still exist here until the archive is cleared. */
+export function listArchivedTimers(): TimerDTO[] {
+  const rows = getDb()
+    .select(timerWithTag)
+    .from(timers)
+    .leftJoin(tags, eq(tags.id, timers.tagId))
+    .where(isNotNull(timers.archivedAt))
+    .orderBy(desc(timers.archivedAt))
     .all()
   return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl))
 }
@@ -64,6 +77,33 @@ export function insertTimer(input: InsertTimerInput): void {
       accumulatedMs: 0,
       createdAt: now,
       updatedAt: now
+    })
+    .run()
+}
+
+export interface InsertCustomTimerLogInput {
+  id: string
+  title: string
+  tagId: string | null
+  durationMs: number
+  loggedAt: number
+}
+
+export function insertCustomTimerLog(input: InsertCustomTimerLogInput): void {
+  getDb()
+    .insert(timers)
+    .values({
+      id: input.id,
+      title: input.title,
+      kind: 'custom_log',
+      status: 'stopped',
+      tagId: input.tagId,
+      startedAt: input.loggedAt - input.durationMs,
+      currentSegmentStartedAt: null,
+      accumulatedMs: input.durationMs,
+      stoppedAt: input.loggedAt,
+      createdAt: input.loggedAt,
+      updatedAt: input.loggedAt
     })
     .run()
 }
@@ -129,6 +169,42 @@ export function updateTimerTitle(id: string, title: string): void {
   getDb().update(timers).set({ title, updatedAt: Date.now() }).where(eq(timers.id, id)).run()
 }
 
-export function deleteTimerRow(id: string): void {
-  getDb().delete(timers).where(eq(timers.id, id)).run()
+export function markTimerLinkOpened(id: string): void {
+  const now = Date.now()
+  getDb().update(timers).set({ linkOpenedAt: now, updatedAt: now }).where(eq(timers.id, id)).run()
+}
+
+export function toggleTimerLoggedConfirmed(id: string): void {
+  const current = getDb().select({ loggedConfirmedAt: timers.loggedConfirmedAt }).from(timers).where(eq(timers.id, id)).get()
+  if (!current) return
+  const now = Date.now()
+  getDb()
+    .update(timers)
+    .set({ loggedConfirmedAt: current.loggedConfirmedAt == null ? now : null, updatedAt: now })
+    .where(eq(timers.id, id))
+    .run()
+}
+
+/** Idempotent set (not toggle) — used by "check all" bulk actions, safe to click more than once. */
+export function setTimersLoggedConfirmed(ids: string[], confirmed: boolean): void {
+  if (ids.length === 0) return
+  const now = Date.now()
+  const db = getDb()
+  for (const id of ids) {
+    db.update(timers)
+      .set({ loggedConfirmedAt: confirmed ? now : null, updatedAt: now })
+      .where(eq(timers.id, id))
+      .run()
+  }
+}
+
+/** Soft delete — the row still exists (in the archive) until clearArchive() runs. */
+export function archiveTimerRow(id: string): void {
+  const now = Date.now()
+  getDb().update(timers).set({ archivedAt: now, updatedAt: now }).where(eq(timers.id, id)).run()
+}
+
+/** Permanently removes every archived timer. Never touches daily_stats. */
+export function clearArchive(): void {
+  getDb().delete(timers).where(isNotNull(timers.archivedAt)).run()
 }

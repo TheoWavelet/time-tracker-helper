@@ -4,7 +4,7 @@ import type { AppSettings, DockSide } from '@shared/types'
 const defaults: AppSettings = {
   dockSide: 'right',
   dockYOffset: null,
-  highlightPausedTimers: true,
+  highlightPausedTimers: false,
   browserDomainFilter: 'atlassian.net'
 }
 

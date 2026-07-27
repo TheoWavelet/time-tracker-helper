@@ -1,4 +1,4 @@
-export type TimerKind = 'one_off' | 'persistent'
+export type TimerKind = 'one_off' | 'persistent' | 'custom_log'
 
 export type TimerStatus = 'running' | 'paused' | 'stopped' | 'submitted' | 'discarded'
 
@@ -20,6 +20,12 @@ export interface TimerDTO {
   /** UI-only reason a paused timer isn't running: manual pause, switched to another timer, or idle-auto-paused. */
   pausedReason: 'manual' | 'switched' | 'idle' | null
   switchedToTitle: string | null
+  /** Set the first time the tag's link was opened from history — drives the "visited" tint. */
+  linkOpenedAt: number | null
+  /** User-ticked "I've logged this time somewhere proper" checkbox in history. */
+  loggedConfirmedAt: number | null
+  /** Set when deleted from history — soft-deleted into the archive rather than destroyed. */
+  archivedAt: number | null
   createdAt: number
   updatedAt: number
 }
@@ -51,6 +57,13 @@ export interface StartTimerInput {
   tagLabel?: string
 }
 
+export interface CustomTimerLogInput {
+  title?: string
+  /** A manually entered, whole-minute duration for a completed time log. */
+  durationMinutes: number
+  tagLabel?: string
+}
+
 export type DockSide = 'left' | 'right'
 
 export interface AppSettings {
@@ -79,4 +92,18 @@ export interface DomainHistoryItem {
 export interface BrowserPairingInfo {
   token: string
   connected: boolean
+}
+
+/** One day's slot in the current (Monday-start) week. */
+export interface WeeklyStatsDay {
+  label: string
+  totalMs: number
+  /** True for days later in the week than today — kept out of the daily-average denominator. */
+  isFuture: boolean
+}
+
+export interface WeeklyStats {
+  days: WeeklyStatsDay[]
+  totalMs: number
+  dailyAverageMs: number
 }

@@ -23,7 +23,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           dashboard: resolve(__dirname, 'src/preload/dashboard.ts'),
-          overlay: resolve(__dirname, 'src/preload/overlay.ts')
+          overlay: resolve(__dirname, 'src/preload/overlay.ts'),
+          stats: resolve(__dirname, 'src/preload/stats.ts')
         }
       }
     }
@@ -37,7 +38,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           dashboard: resolve(__dirname, 'src/renderer/dashboard/index.html'),
-          overlay: resolve(__dirname, 'src/renderer/overlay/index.html')
+          overlay: resolve(__dirname, 'src/renderer/overlay/index.html'),
+          stats: resolve(__dirname, 'src/renderer/stats/index.html')
         }
       }
     },

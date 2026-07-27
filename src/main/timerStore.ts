@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { getRawSqlite } from './db/connection'
 import * as timersRepo from './db/repositories/timers.repo'
 import * as tagsRepo from './db/repositories/tags.repo'
+import * as statsStore from './statsStore'
 import { formatDefaultTimerTitle } from '@shared/format'
-import type { StartTimerInput, TimerDTO, TimersSnapshot } from '@shared/types'
+import type { CustomTimerLogInput, StartTimerInput, TimerDTO, TimersSnapshot } from '@shared/types'
 
 type Listener = (snapshot: TimersSnapshot) => void
 
@@ -48,6 +49,34 @@ export function startTimer(input: StartTimerInput): TimerDTO {
   return created
 }
 
+export function createCustomTimerLog(input: CustomTimerLogInput): TimerDTO {
+  if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 1 || input.durationMinutes > 24 * 60) {
+    throw new Error('Custom log duration must be a whole number between 1 and 1,440 minutes')
+  }
+
+  const sqlite = getRawSqlite()
+  const loggedAt = Date.now()
+  const title = input.title?.trim() || formatDefaultTimerTitle(loggedAt)
+  const id = sqlite.transaction(() => {
+    const tagId = input.tagLabel?.trim() ? tagsRepo.findOrCreateTagByLabel(input.tagLabel).id : null
+    const customLogId = randomUUID()
+    timersRepo.insertCustomTimerLog({
+      id: customLogId,
+      title,
+      tagId,
+      durationMs: input.durationMinutes * 60_000,
+      loggedAt
+    })
+    return customLogId
+  })()
+
+  const created = timersRepo.findTimerById(id)
+  if (!created) throw new Error('Custom log disappeared immediately after creation')
+  statsStore.recordTrackedTime(loggedAt, created.accumulatedMs)
+  emitChange()
+  return created
+}
+
 export function pauseTimer(id: string): void {
   timersRepo.pauseTimerRow(id, 'manual', null)
   emitChange()
@@ -74,16 +103,45 @@ export function resumeTimer(id: string): void {
 
 export function stopTimer(id: string): void {
   timersRepo.stopTimerRow(id)
+  const stopped = timersRepo.findTimerById(id)
+  if (stopped && stopped.stoppedAt != null) {
+    statsStore.recordTrackedTime(stopped.stoppedAt, stopped.accumulatedMs)
+  }
   emitChange()
 }
 
+/** Soft delete — moves the timer to the archive (see the "Archive & stats" window) rather than
+ *  destroying it. Its already-recorded stats contribution, if any, is untouched either way. */
 export function deleteTimer(id: string): void {
-  timersRepo.deleteTimerRow(id)
+  timersRepo.archiveTimerRow(id)
   emitChange()
+}
+
+export function listArchivedTimers(): TimerDTO[] {
+  return timersRepo.listArchivedTimers()
+}
+
+export function clearArchive(): void {
+  timersRepo.clearArchive()
 }
 
 export function updateTimerTitle(id: string, title: string): void {
   timersRepo.updateTimerTitle(id, title)
+  emitChange()
+}
+
+export function markTimerLinkOpened(id: string): void {
+  timersRepo.markTimerLinkOpened(id)
+  emitChange()
+}
+
+export function toggleTimerLoggedConfirmed(id: string): void {
+  timersRepo.toggleTimerLoggedConfirmed(id)
+  emitChange()
+}
+
+export function setTimersLoggedConfirmed(ids: string[], confirmed: boolean): void {
+  timersRepo.setTimersLoggedConfirmed(ids, confirmed)
   emitChange()
 }
 

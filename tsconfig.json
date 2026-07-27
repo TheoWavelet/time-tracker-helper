@@ -3,6 +3,7 @@
   "references": [
     { "path": "./tsconfig.node.json" },
     { "path": "./tsconfig.web.dashboard.json" },
-    { "path": "./tsconfig.web.overlay.json" }
+    { "path": "./tsconfig.web.overlay.json" },
+    { "path": "./tsconfig.web.stats.json" }
   ]
 }

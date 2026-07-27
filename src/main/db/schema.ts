@@ -19,7 +19,7 @@ export const tags = sqliteTable('tags', {
 export const timers = sqliteTable('timers', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
-  kind: text('kind', { enum: ['one_off', 'persistent'] }).notNull(),
+  kind: text('kind', { enum: ['one_off', 'persistent', 'custom_log'] }).notNull(),
   status: text('status', { enum: ['running', 'paused', 'stopped', 'submitted', 'discarded'] }).notNull(),
   tagId: text('tag_id').references(() => tags.id),
   startedAt: integer('started_at').notNull(),
@@ -31,7 +31,18 @@ export const timers = sqliteTable('timers', {
   note: text('note'),
   pausedReason: text('paused_reason', { enum: ['manual', 'switched', 'idle'] }),
   switchedToTitle: text('switched_to_title'),
+  linkOpenedAt: integer('link_opened_at'),
+  loggedConfirmedAt: integer('logged_confirmed_at'),
+  archivedAt: integer('archived_at'),
   createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull()
+})
+
+/** Permanent per-day tracked-time totals — written once when a timer is finalized (stopped or
+ *  custom-logged) and never touched again, so archiving/clearing history can't erase past stats. */
+export const dailyStats = sqliteTable('daily_stats', {
+  date: text('date').primaryKey(),
+  totalMs: integer('total_ms').notNull(),
   updatedAt: integer('updated_at').notNull()
 })
 

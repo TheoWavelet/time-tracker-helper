@@ -5,11 +5,13 @@ import type { DockSide } from '@shared/types'
 
 const BAR_WIDTH = 88
 const BAR_WIDE_WIDTH = BAR_WIDTH * 4
-const BAR_ROW_HEIGHT = 40
-const SEE_MORE_HEIGHT = 18
+const BAR_ROW_HEIGHT = 44
+const SEE_MORE_HEIGHT = 36
 const PANEL_SIZE = { width: 320, height: 440 }
 const EDGE_MARGIN = 8
 const MOVE_SAVE_DEBOUNCE_MS = 300
+const RESIZE_ANIMATION_MS = 140
+const RESIZE_ANIMATION_STEP_MS = 8
 
 let overlayWindow: BrowserWindow | null = null
 let expanded = false
@@ -19,13 +21,59 @@ let moveSaveTimer: NodeJS.Timeout | null = null
 let dragActive = false
 let dragAnchorCursorY = 0
 let dragAnchorWindowY = 0
+let resizeAnimationTimer: NodeJS.Timeout | null = null
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3)
+}
+
+/**
+ * Windows' `setBounds()` has no built-in animation (unlike macOS), so this steps toward the
+ * target itself. Restarting from the window's CURRENT bounds (not the previous target) means an
+ * interrupted animation — e.g. a hover flipping again mid-transition — redirects smoothly instead
+ * of snapping back to where the last animation started.
+ */
+function animateBoundsTo(target: { x: number; y: number; width: number; height: number }): void {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  if (resizeAnimationTimer) {
+    clearInterval(resizeAnimationTimer)
+    resizeAnimationTimer = null
+  }
+
+  const start = overlayWindow.getBounds()
+  const startedAt = Date.now()
+
+  resizeAnimationTimer = setInterval(() => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) {
+      if (resizeAnimationTimer) clearInterval(resizeAnimationTimer)
+      resizeAnimationTimer = null
+      return
+    }
+    const t = Math.min(1, (Date.now() - startedAt) / RESIZE_ANIMATION_MS)
+    const eased = easeOutCubic(t)
+    overlayWindow.setBounds({
+      x: Math.round(start.x + (target.x - start.x) * eased),
+      y: Math.round(start.y + (target.y - start.y) * eased),
+      width: Math.round(start.width + (target.width - start.width) * eased),
+      height: Math.round(start.height + (target.height - start.height) * eased)
+    })
+    if (t >= 1 && resizeAnimationTimer) {
+      clearInterval(resizeAnimationTimer)
+      resizeAnimationTimer = null
+    }
+  }, RESIZE_ANIMATION_STEP_MS)
+}
+
 function collapsedHeight(workAreaHeight: number): number {
-  const desired = BAR_ROW_HEIGHT * Math.max(1, activeTimerCount) + SEE_MORE_HEIGHT
+  const rowCount = Math.max(1, activeTimerCount)
+  // +1px per divider between rows (.bar-row + .bar-row's border-top) — otherwise each border
+  // eats into the flex-shrink:0 rows' own box and the stack overflows by a few px, letting the
+  // "see more" arrow visually clip the bottom of the last row.
+  const desired = BAR_ROW_HEIGHT * rowCount + Math.max(0, rowCount - 1) + SEE_MORE_HEIGHT
   return Math.min(desired, workAreaHeight - 2 * EDGE_MARGIN)
 }
 
@@ -57,7 +105,14 @@ function computeBounds(
 function repositionOverlay(): void {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
   const { dockSide, dockYOffset } = getSettings()
-  overlayWindow.setBounds(computeBounds(dockSide, expanded, dockYOffset))
+  const target = computeBounds(dockSide, expanded, dockYOffset)
+  // Never animate while the user is actively dragging — dragUpdate() already drives bounds
+  // directly every tick, and easing on top of that would just add lag behind the cursor.
+  if (dragActive) {
+    overlayWindow.setBounds(target)
+    return
+  }
+  animateBoundsTo(target)
 }
 
 /** Debounced so a native drag (which fires 'move' continuously) doesn't hammer disk writes. */
@@ -138,6 +193,10 @@ export function setBarWide(wide: boolean): void {
 
 function dragStart(): void {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
+  if (resizeAnimationTimer) {
+    clearInterval(resizeAnimationTimer)
+    resizeAnimationTimer = null
+  }
   dragActive = true
   dragAnchorCursorY = screen.getCursorScreenPoint().y
   dragAnchorWindowY = overlayWindow.getBounds().y

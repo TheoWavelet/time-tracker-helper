@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AppSettings,
   BrowserPairingInfo,
+  CustomTimerLogInput,
   DomainHistoryItem,
   OpenTabInfo,
   StartTimerInput,
@@ -14,9 +15,11 @@ const api = {
   timers: {
     getSnapshot: (): Promise<TimersSnapshot> => ipcRenderer.invoke('timers:getSnapshot'),
     start: (input: StartTimerInput): Promise<TimerDTO> => ipcRenderer.invoke('timers:start', input),
+    createCustomLog: (input: CustomTimerLogInput): Promise<TimerDTO> => ipcRenderer.invoke('timers:createCustomLog', input),
     pause: (id: string) => ipcRenderer.invoke('timers:pause', id),
     resume: (id: string) => ipcRenderer.invoke('timers:resume', id),
     stop: (id: string) => ipcRenderer.invoke('timers:stop', id),
+    delete: (id: string) => ipcRenderer.invoke('timers:delete', id),
     onChanged: (callback: (snapshot: TimersSnapshot) => void): (() => void) => {
       const listener = (_event: unknown, snapshot: TimersSnapshot): void => callback(snapshot)
       ipcRenderer.on('timers:changed', listener)

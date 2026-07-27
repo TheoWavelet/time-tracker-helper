@@ -5,13 +5,14 @@ import { registerTagsIpc } from './ipc/tags.ipc'
 import { registerSettingsIpc } from './ipc/settings.ipc'
 import { registerShellIpc } from './ipc/shell.ipc'
 import { registerBrowserIpc } from './ipc/browser.ipc'
+import { registerArchiveIpc } from './ipc/archive.ipc'
 import { createOverlayWindow, registerOverlayIpc, applyDockSide, setActiveTimerCount } from './windows/overlayWindow'
 import { showDashboardWindow, registerDashboardIpc } from './windows/dashboardWindow'
+import { registerStatsWindowIpc } from './windows/statsWindow'
 import { createTray, refreshTrayMenu } from './tray'
 import { getSnapshot, onTimersChanged } from './timerStore'
 import { startIdleMonitor } from './idleMonitor'
 import { startBrowserBridge } from './browserBridge'
-import { setQuitting } from './appState'
 import type { TimersSnapshot } from '@shared/types'
 
 function countActiveTimers(snapshot: TimersSnapshot): number {
@@ -23,6 +24,8 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   app.quit()
 } else {
+  app.setAppUserModelId('com.timetrackinghelper.app')
+
   app.on('second-instance', () => {
     showDashboardWindow()
   })
@@ -37,6 +40,8 @@ if (!gotSingleInstanceLock) {
     registerShellIpc()
     registerDashboardIpc()
     registerBrowserIpc()
+    registerArchiveIpc()
+    registerStatsWindowIpc()
 
     createOverlayWindow()
     createTray()
@@ -49,8 +54,6 @@ if (!gotSingleInstanceLock) {
       setActiveTimerCount(countActiveTimers(snapshot))
     })
   })
-
-  app.on('before-quit', () => setQuitting(true))
 
   app.on('window-all-closed', () => {
     // This is a tray app — closing/hiding the dashboard window must not quit it.

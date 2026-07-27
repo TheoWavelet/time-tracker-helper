@@ -19,7 +19,7 @@
   },
   "include": [
     "src/renderer/overlay/**/*",
-    "src/renderer/shared/**/*",
+    "src/renderer/components/**/*",
     "src/shared/**/*",
     "src/preload/overlay.ts"
   ]

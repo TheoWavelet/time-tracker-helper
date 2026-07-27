@@ -1,6 +1,13 @@
 const WS_URL = 'ws://127.0.0.1:51834';
+const RECONNECT_DELAY_MS = 1500;
 const RECONNECT_ALARM = 'reconnect';
-const RECONNECT_DELAY_MS = 3000;
+// Chrome enforces ~1 minute as the practical floor for repeating alarms (it may silently coerce
+// anything shorter), but even that is far better than nothing — see the alarm listener below for why.
+const RECONNECT_ALARM_PERIOD_MINUTES = 1;
+// Matches DEV_PAIRING_TOKEN in src/main/browserBridge.ts — the desktop app always accepts this
+// constant (dev or packaged), so trying it here whenever no token is saved means zero pairing
+// step at all, ever.
+const DEV_PAIRING_TOKEN = 'dev-pairing-token-insecure-local-only';
 
 let socket = null;
 
@@ -14,13 +21,13 @@ function connect() {
   if (isSocketOpen() || (socket && socket.readyState === WebSocket.CONNECTING)) return;
 
   chrome.storage.local.get('pairingToken', ({ pairingToken }) => {
-    if (!pairingToken) return;
+    const token = pairingToken || DEV_PAIRING_TOKEN;
 
     const ws = new WebSocket(WS_URL);
     socket = ws;
 
     ws.addEventListener('open', () => {
-      ws.send(JSON.stringify({ type: 'auth', token: pairingToken }));
+      ws.send(JSON.stringify({ type: 'auth', token }));
     });
 
     ws.addEventListener('message', (event) => {
@@ -73,66 +80,6 @@ function reply(requestId, type, payload) {
   socket.send(JSON.stringify({ type, requestId, ...payload }));
 }
 
-const LOGWORK_PARAM = 'tt_logwork';
-
-function hasLogWorkTrigger(url) {
-  try {
-    return new URL(url).searchParams.get(LOGWORK_PARAM) === '1';
-  } catch {
-    return false;
-  }
-}
-
-// Runs inside EVERY frame of the tab (the button lives inside an iframe, invisible to a
-// top-frame-only query) — Jira is a heavy SPA, so it often isn't in the DOM yet even once the
-// tab reports itself "complete"; retry a few times instead of assuming it's there. Returns
-// whether this frame found and clicked it, so the caller knows whether to clean up the URL.
-function clickLogWorkButtonInFrame() {
-  const MAX_ATTEMPTS = 5;
-  const RETRY_DELAY_MS = 2000;
-
-  return new Promise((resolve) => {
-    let attempt = 0;
-    function tryClick() {
-      attempt += 1;
-      const button = document.querySelector('[data-test-id="LogWorkButton"]');
-      if (button) {
-        button.click();
-        resolve(true);
-        return;
-      }
-      if (attempt < MAX_ATTEMPTS) {
-        setTimeout(tryClick, RETRY_DELAY_MS);
-      } else {
-        resolve(false);
-      }
-    }
-    tryClick();
-  });
-}
-
-// Run in the top frame only — the iframe's own location isn't the tab URL tabs.onUpdated reads.
-function clearLogWorkTrigger() {
-  const url = new URL(window.location.href);
-  url.searchParams.delete('tt_logwork');
-  window.history.replaceState({}, '', url.toString());
-}
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status !== 'complete') return;
-  if (!tab.url || !hasLogWorkTrigger(tab.url)) return;
-
-  const results = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
-    func: clickLogWorkButtonInFrame,
-  });
-
-  const clicked = results.some((r) => r.result === true);
-  if (clicked) {
-    chrome.scripting.executeScript({ target: { tabId }, func: clearLogWorkTrigger });
-  }
-});
-
 // Reconnect immediately when a fresh token is saved from the options page.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.pairingToken) return;
@@ -143,14 +90,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
   connect();
 });
 
-// The service worker can be suspended and woken later — an alarm is a more reliable way to retry
-// a dropped connection than trusting a long-lived setTimeout to survive that suspension.
-chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: 1 });
+chrome.runtime.onStartup.addListener(connect);
+chrome.runtime.onInstalled.addListener(connect);
+
+// Safety net for the setTimeout above: MV3 service workers get killed by Chrome after a short
+// idle period, silently dropping any pending setTimeout along with them — a dropped WebSocket
+// could then never retry again. An alarm specifically wakes the service worker back up to fire,
+// even after Chrome has already terminated it, so this guarantees eventual reconnection.
+chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: RECONNECT_ALARM_PERIOD_MINUTES });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RECONNECT_ALARM) connect();
 });
-
-chrome.runtime.onStartup.addListener(connect);
-chrome.runtime.onInstalled.addListener(connect);
 
 connect();

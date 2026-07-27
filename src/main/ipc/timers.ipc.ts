@@ -1,11 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import * as timerStore from '../timerStore'
-import type { StartTimerInput } from '@shared/types'
+import type { CustomTimerLogInput, StartTimerInput } from '@shared/types'
 
 export function registerTimerIpc(): void {
   ipcMain.handle('timers:getSnapshot', () => timerStore.getSnapshot())
 
   ipcMain.handle('timers:start', (_event, input: StartTimerInput) => timerStore.startTimer(input))
+
+  ipcMain.handle('timers:createCustomLog', (_event, input: CustomTimerLogInput) => timerStore.createCustomTimerLog(input))
 
   ipcMain.handle('timers:pause', (_event, id: string) => timerStore.pauseTimer(id))
 
@@ -17,6 +19,14 @@ export function registerTimerIpc(): void {
 
   ipcMain.handle('timers:updateTitle', (_event, { id, title }: { id: string; title: string }) =>
     timerStore.updateTimerTitle(id, title)
+  )
+
+  ipcMain.handle('timers:markLinkOpened', (_event, id: string) => timerStore.markTimerLinkOpened(id))
+
+  ipcMain.handle('timers:toggleLoggedConfirmed', (_event, id: string) => timerStore.toggleTimerLoggedConfirmed(id))
+
+  ipcMain.handle('timers:setLoggedConfirmed', (_event, ids: string[], confirmed: boolean) =>
+    timerStore.setTimersLoggedConfirmed(ids, confirmed)
   )
 
   timerStore.onTimersChanged((snapshot) => {

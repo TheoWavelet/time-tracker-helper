@@ -10,9 +10,74 @@ const Store = require("electron-store");
 const ws = require("ws");
 const migration0001 = "CREATE TABLE tags (\n  id TEXT PRIMARY KEY,\n  label TEXT NOT NULL UNIQUE,\n  target_url TEXT NULL,\n  is_favorite INTEGER NOT NULL DEFAULT 0,\n  archived_at INTEGER NULL,\n  created_at INTEGER NOT NULL,\n  updated_at INTEGER NOT NULL\n);\n\nCREATE INDEX idx_tags_is_favorite ON tags (is_favorite);\n\nCREATE TABLE timers (\n  id TEXT PRIMARY KEY,\n  title TEXT NOT NULL,\n  kind TEXT NOT NULL CHECK (kind IN ('one_off', 'persistent')),\n  status TEXT NOT NULL CHECK (status IN ('running', 'paused', 'stopped', 'submitted', 'discarded')),\n  tag_id TEXT NULL REFERENCES tags (id),\n  started_at INTEGER NOT NULL,\n  current_segment_started_at INTEGER NULL,\n  accumulated_ms INTEGER NOT NULL DEFAULT 0,\n  stopped_at INTEGER NULL,\n  submitted_at INTEGER NULL,\n  discarded_at INTEGER NULL,\n  note TEXT NULL,\n  paused_reason TEXT NULL CHECK (paused_reason IN ('manual', 'switched')),\n  switched_to_title TEXT NULL,\n  created_at INTEGER NOT NULL,\n  updated_at INTEGER NOT NULL\n);\n\nCREATE INDEX idx_timers_status ON timers (status);\nCREATE INDEX idx_timers_tag_id ON timers (tag_id);\n\nCREATE TABLE links (\n  id TEXT PRIMARY KEY,\n  timer_id TEXT NOT NULL REFERENCES timers (id) ON DELETE CASCADE,\n  link_type TEXT NOT NULL CHECK (link_type IN ('browser_url', 'explorer_path', 'application')),\n  value TEXT NOT NULL,\n  title TEXT NULL,\n  icon TEXT NULL,\n  created_at INTEGER NOT NULL\n);\n\nCREATE INDEX idx_links_timer_id ON links (timer_id);\n";
 const migration0002 = "-- SQLite can't ALTER an existing CHECK constraint in place, so allowing paused_reason = 'idle'\n-- (auto-paused by idle detection) means rebuilding the table.\nCREATE TABLE timers_new (\n  id TEXT PRIMARY KEY,\n  title TEXT NOT NULL,\n  kind TEXT NOT NULL CHECK (kind IN ('one_off', 'persistent')),\n  status TEXT NOT NULL CHECK (status IN ('running', 'paused', 'stopped', 'submitted', 'discarded')),\n  tag_id TEXT NULL REFERENCES tags (id),\n  started_at INTEGER NOT NULL,\n  current_segment_started_at INTEGER NULL,\n  accumulated_ms INTEGER NOT NULL DEFAULT 0,\n  stopped_at INTEGER NULL,\n  submitted_at INTEGER NULL,\n  discarded_at INTEGER NULL,\n  note TEXT NULL,\n  paused_reason TEXT NULL CHECK (paused_reason IN ('manual', 'switched', 'idle')),\n  switched_to_title TEXT NULL,\n  created_at INTEGER NOT NULL,\n  updated_at INTEGER NOT NULL\n);\n\nINSERT INTO timers_new (\n  id, title, kind, status, tag_id, started_at, current_segment_started_at, accumulated_ms,\n  stopped_at, submitted_at, discarded_at, note, paused_reason, switched_to_title, created_at, updated_at\n)\nSELECT\n  id, title, kind, status, tag_id, started_at, current_segment_started_at, accumulated_ms,\n  stopped_at, submitted_at, discarded_at, note, paused_reason, switched_to_title, created_at, updated_at\nFROM timers;\n\nDROP TABLE timers;\nALTER TABLE timers_new RENAME TO timers;\n\nCREATE INDEX idx_timers_status ON timers (status);\nCREATE INDEX idx_timers_tag_id ON timers (tag_id);\n";
+const migration0003 = `-- Widens the kind CHECK to allow 'custom_log' (added at the application layer without a matching
+-- migration, so every custom-log insert was failing its CHECK constraint) and adds two tracking
+-- columns: link_opened_at (has the tag's link ever been opened from history — for the "visited"
+-- tint) and logged_confirmed_at (user-ticked "I've logged this somewhere proper" checkbox).
+-- SQLite can't ALTER an existing CHECK constraint in place, so this means rebuilding the table.
+CREATE TABLE timers_new (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('one_off', 'persistent', 'custom_log')),
+  status TEXT NOT NULL CHECK (status IN ('running', 'paused', 'stopped', 'submitted', 'discarded')),
+  tag_id TEXT NULL REFERENCES tags (id),
+  started_at INTEGER NOT NULL,
+  current_segment_started_at INTEGER NULL,
+  accumulated_ms INTEGER NOT NULL DEFAULT 0,
+  stopped_at INTEGER NULL,
+  submitted_at INTEGER NULL,
+  discarded_at INTEGER NULL,
+  note TEXT NULL,
+  paused_reason TEXT NULL CHECK (paused_reason IN ('manual', 'switched', 'idle')),
+  switched_to_title TEXT NULL,
+  link_opened_at INTEGER NULL,
+  logged_confirmed_at INTEGER NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+INSERT INTO timers_new (
+  id, title, kind, status, tag_id, started_at, current_segment_started_at, accumulated_ms,
+  stopped_at, submitted_at, discarded_at, note, paused_reason, switched_to_title, created_at, updated_at
+)
+SELECT
+  id, title, kind, status, tag_id, started_at, current_segment_started_at, accumulated_ms,
+  stopped_at, submitted_at, discarded_at, note, paused_reason, switched_to_title, created_at, updated_at
+FROM timers;
+
+DROP TABLE timers;
+ALTER TABLE timers_new RENAME TO timers;
+
+CREATE INDEX idx_timers_status ON timers (status);
+CREATE INDEX idx_timers_tag_id ON timers (tag_id);
+`;
+const migration0004 = `-- Adds a soft-delete column so "delete" moves a timer to an archive instead of destroying it
+-- outright, plus a daily_stats table that permanently records tracked time per calendar day —
+-- kept independent of the timers table so clearing the archive (a real, hard delete) never
+-- erases past statistics.
+ALTER TABLE timers ADD COLUMN archived_at INTEGER NULL;
+
+CREATE TABLE daily_stats (
+  date TEXT PRIMARY KEY,
+  total_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+
+-- Backfill from existing history so upgrading doesn't reset stats to zero.
+INSERT INTO daily_stats (date, total_ms, updated_at)
+SELECT
+  date(stopped_at / 1000, 'unixepoch', 'localtime') AS day,
+  SUM(accumulated_ms) AS total_ms,
+  MAX(updated_at) AS updated_at
+FROM timers
+WHERE status = 'stopped' AND stopped_at IS NOT NULL
+GROUP BY day;
+`;
 const MIGRATIONS = [
   { version: 1, sql: migration0001 },
-  { version: 2, sql: migration0002 }
+  { version: 2, sql: migration0002 },
+  { version: 3, sql: migration0003 },
+  { version: 4, sql: migration0004 }
 ];
 let sqlite = null;
 let db = null;
@@ -56,7 +121,7 @@ const tags = sqliteCore.sqliteTable("tags", {
 const timers = sqliteCore.sqliteTable("timers", {
   id: sqliteCore.text("id").primaryKey(),
   title: sqliteCore.text("title").notNull(),
-  kind: sqliteCore.text("kind", { enum: ["one_off", "persistent"] }).notNull(),
+  kind: sqliteCore.text("kind", { enum: ["one_off", "persistent", "custom_log"] }).notNull(),
   status: sqliteCore.text("status", { enum: ["running", "paused", "stopped", "submitted", "discarded"] }).notNull(),
   tagId: sqliteCore.text("tag_id").references(() => tags.id),
   startedAt: sqliteCore.integer("started_at").notNull(),
@@ -68,7 +133,15 @@ const timers = sqliteCore.sqliteTable("timers", {
   note: sqliteCore.text("note"),
   pausedReason: sqliteCore.text("paused_reason", { enum: ["manual", "switched", "idle"] }),
   switchedToTitle: sqliteCore.text("switched_to_title"),
+  linkOpenedAt: sqliteCore.integer("link_opened_at"),
+  loggedConfirmedAt: sqliteCore.integer("logged_confirmed_at"),
+  archivedAt: sqliteCore.integer("archived_at"),
   createdAt: sqliteCore.integer("created_at").notNull(),
+  updatedAt: sqliteCore.integer("updated_at").notNull()
+});
+const dailyStats = sqliteCore.sqliteTable("daily_stats", {
+  date: sqliteCore.text("date").primaryKey(),
+  totalMs: sqliteCore.integer("total_ms").notNull(),
   updatedAt: sqliteCore.integer("updated_at").notNull()
 });
 sqliteCore.sqliteTable("links", {
@@ -85,7 +158,11 @@ function mapRow$1(row, tagLabel, tagTargetUrl) {
 }
 const timerWithTag = { timer: timers, tagLabel: tags.label, tagTargetUrl: tags.targetUrl };
 function listTimers() {
-  const rows = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).orderBy(drizzleOrm.desc(timers.startedAt)).all();
+  const rows = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.isNull(timers.archivedAt)).orderBy(drizzleOrm.desc(timers.startedAt)).all();
+  return rows.map((row) => mapRow$1(row.timer, row.tagLabel, row.tagTargetUrl));
+}
+function listArchivedTimers$1() {
+  const rows = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.isNotNull(timers.archivedAt)).orderBy(drizzleOrm.desc(timers.archivedAt)).all();
   return rows.map((row) => mapRow$1(row.timer, row.tagLabel, row.tagTargetUrl));
 }
 function findRunningTimer() {
@@ -109,6 +186,21 @@ function insertTimer(input) {
     accumulatedMs: 0,
     createdAt: now,
     updatedAt: now
+  }).run();
+}
+function insertCustomTimerLog(input) {
+  getDb().insert(timers).values({
+    id: input.id,
+    title: input.title,
+    kind: "custom_log",
+    status: "stopped",
+    tagId: input.tagId,
+    startedAt: input.loggedAt - input.durationMs,
+    currentSegmentStartedAt: null,
+    accumulatedMs: input.durationMs,
+    stoppedAt: input.loggedAt,
+    createdAt: input.loggedAt,
+    updatedAt: input.loggedAt
   }).run();
 }
 function pauseTimerRow(id, reason, switchedToTitle, endAt) {
@@ -147,8 +239,30 @@ function stopTimerRow(id) {
 function updateTimerTitle$1(id, title) {
   getDb().update(timers).set({ title, updatedAt: Date.now() }).where(drizzleOrm.eq(timers.id, id)).run();
 }
-function deleteTimerRow(id) {
-  getDb().delete(timers).where(drizzleOrm.eq(timers.id, id)).run();
+function markTimerLinkOpened$1(id) {
+  const now = Date.now();
+  getDb().update(timers).set({ linkOpenedAt: now, updatedAt: now }).where(drizzleOrm.eq(timers.id, id)).run();
+}
+function toggleTimerLoggedConfirmed$1(id) {
+  const current = getDb().select({ loggedConfirmedAt: timers.loggedConfirmedAt }).from(timers).where(drizzleOrm.eq(timers.id, id)).get();
+  if (!current) return;
+  const now = Date.now();
+  getDb().update(timers).set({ loggedConfirmedAt: current.loggedConfirmedAt == null ? now : null, updatedAt: now }).where(drizzleOrm.eq(timers.id, id)).run();
+}
+function setTimersLoggedConfirmed$1(ids, confirmed) {
+  if (ids.length === 0) return;
+  const now = Date.now();
+  const db2 = getDb();
+  for (const id of ids) {
+    db2.update(timers).set({ loggedConfirmedAt: confirmed ? now : null, updatedAt: now }).where(drizzleOrm.eq(timers.id, id)).run();
+  }
+}
+function archiveTimerRow(id) {
+  const now = Date.now();
+  getDb().update(timers).set({ archivedAt: now, updatedAt: now }).where(drizzleOrm.eq(timers.id, id)).run();
+}
+function clearArchive$1() {
+  getDb().delete(timers).where(drizzleOrm.isNotNull(timers.archivedAt)).run();
 }
 function mapRow(row) {
   return {
@@ -214,6 +328,59 @@ function toggleTagFavorite$1(id) {
   if (!updated) throw new Error("Tag disappeared immediately after update");
   return updated;
 }
+function addTrackedMs(dateKey, ms) {
+  const now = Date.now();
+  getRawSqlite().prepare(
+    `INSERT INTO daily_stats (date, total_ms, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(date) DO UPDATE SET total_ms = total_ms + excluded.total_ms, updated_at = excluded.updated_at`
+  ).run(dateKey, ms, now);
+}
+function getTrackedMsForDates(dateKeys) {
+  if (dateKeys.length === 0) return /* @__PURE__ */ new Map();
+  const rows = getDb().select().from(dailyStats).where(drizzleOrm.inArray(dailyStats.date, dateKeys)).all();
+  return new Map(rows.map((row) => [row.date, row.totalMs]));
+}
+const DAY_MS = 24 * 60 * 60 * 1e3;
+function startOfDay(timestamp) {
+  const d = new Date(timestamp);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+function startOfWeek(timestamp) {
+  const d = new Date(timestamp);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - daysSinceMonday);
+  return d.getTime();
+}
+function localDateKey(timestamp) {
+  const d = new Date(timestamp);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function recordTrackedTime(finishedAt, ms) {
+  if (ms <= 0) return;
+  addTrackedMs(localDateKey(finishedAt), ms);
+}
+function getWeeklyStats(now = Date.now()) {
+  const weekStart = startOfWeek(now);
+  const todayStart = startOfDay(now);
+  const dayStarts = Array.from({ length: 7 }, (_, i) => weekStart + i * DAY_MS);
+  const dateKeys = dayStarts.map(localDateKey);
+  const totals = getTrackedMsForDates(dateKeys);
+  const days = dayStarts.map((dayStart, i) => ({
+    label: new Date(dayStart).toLocaleDateString("en-US", { weekday: "short" }),
+    totalMs: totals.get(dateKeys[i]) ?? 0,
+    isFuture: dayStart > todayStart
+  }));
+  const elapsedDays = Math.floor((todayStart - weekStart) / DAY_MS) + 1;
+  const totalMs = days.reduce((sum, d) => sum + d.totalMs, 0);
+  const dailyAverageMs = totalMs / Math.max(1, elapsedDays);
+  return { days, totalMs, dailyAverageMs };
+}
 function formatDefaultTimerTitle(startedAt) {
   const d = new Date(startedAt);
   const pad = (n) => n.toString().padStart(2, "0");
@@ -252,6 +419,31 @@ function startTimer(input) {
   if (!created) throw new Error("Timer disappeared immediately after creation");
   return created;
 }
+function createCustomTimerLog(input) {
+  if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 1 || input.durationMinutes > 24 * 60) {
+    throw new Error("Custom log duration must be a whole number between 1 and 1,440 minutes");
+  }
+  const sqlite2 = getRawSqlite();
+  const loggedAt = Date.now();
+  const title = input.title?.trim() || formatDefaultTimerTitle(loggedAt);
+  const id = sqlite2.transaction(() => {
+    const tagId = input.tagLabel?.trim() ? findOrCreateTagByLabel(input.tagLabel).id : null;
+    const customLogId = node_crypto.randomUUID();
+    insertCustomTimerLog({
+      id: customLogId,
+      title,
+      tagId,
+      durationMs: input.durationMinutes * 6e4,
+      loggedAt
+    });
+    return customLogId;
+  })();
+  const created = findTimerById(id);
+  if (!created) throw new Error("Custom log disappeared immediately after creation");
+  recordTrackedTime(loggedAt, created.accumulatedMs);
+  emitChange();
+  return created;
+}
 function pauseTimer(id) {
   pauseTimerRow(id, "manual", null);
   emitChange();
@@ -274,14 +466,36 @@ function resumeTimer(id) {
 }
 function stopTimer(id) {
   stopTimerRow(id);
+  const stopped = findTimerById(id);
+  if (stopped && stopped.stoppedAt != null) {
+    recordTrackedTime(stopped.stoppedAt, stopped.accumulatedMs);
+  }
   emitChange();
 }
 function deleteTimer(id) {
-  deleteTimerRow(id);
+  archiveTimerRow(id);
   emitChange();
+}
+function listArchivedTimers() {
+  return listArchivedTimers$1();
+}
+function clearArchive() {
+  clearArchive$1();
 }
 function updateTimerTitle(id, title) {
   updateTimerTitle$1(id, title);
+  emitChange();
+}
+function markTimerLinkOpened(id) {
+  markTimerLinkOpened$1(id);
+  emitChange();
+}
+function toggleTimerLoggedConfirmed(id) {
+  toggleTimerLoggedConfirmed$1(id);
+  emitChange();
+}
+function setTimersLoggedConfirmed(ids, confirmed) {
+  setTimersLoggedConfirmed$1(ids, confirmed);
   emitChange();
 }
 function listTags() {
@@ -299,6 +513,7 @@ function toggleTagFavorite(id) {
 function registerTimerIpc() {
   electron.ipcMain.handle("timers:getSnapshot", () => getSnapshot());
   electron.ipcMain.handle("timers:start", (_event, input) => startTimer(input));
+  electron.ipcMain.handle("timers:createCustomLog", (_event, input) => createCustomTimerLog(input));
   electron.ipcMain.handle("timers:pause", (_event, id) => pauseTimer(id));
   electron.ipcMain.handle("timers:resume", (_event, id) => resumeTimer(id));
   electron.ipcMain.handle("timers:stop", (_event, id) => stopTimer(id));
@@ -306,6 +521,12 @@ function registerTimerIpc() {
   electron.ipcMain.handle(
     "timers:updateTitle",
     (_event, { id, title }) => updateTimerTitle(id, title)
+  );
+  electron.ipcMain.handle("timers:markLinkOpened", (_event, id) => markTimerLinkOpened(id));
+  electron.ipcMain.handle("timers:toggleLoggedConfirmed", (_event, id) => toggleTimerLoggedConfirmed(id));
+  electron.ipcMain.handle(
+    "timers:setLoggedConfirmed",
+    (_event, ids, confirmed) => setTimersLoggedConfirmed(ids, confirmed)
   );
   onTimersChanged((snapshot) => {
     for (const win of electron.BrowserWindow.getAllWindows()) {
@@ -325,7 +546,7 @@ function registerTagsIpc() {
 const defaults = {
   dockSide: "right",
   dockYOffset: null,
-  highlightPausedTimers: true,
+  highlightPausedTimers: false,
   browserDomainFilter: "atlassian.net"
 };
 const store = new Store({ defaults });
@@ -383,6 +604,7 @@ function registerShellIpc() {
 }
 const PORT = 51834;
 const REQUEST_TIMEOUT_MS = 2e3;
+const DEV_PAIRING_TOKEN = "dev-pairing-token-insecure-local-only";
 const pairingStore = new Store({ name: "browser-pairing" });
 function getOrCreatePairingToken() {
   let token = pairingStore.get("pairingToken");
@@ -411,6 +633,11 @@ function handleAuthenticatedMessage(raw) {
 function startBrowserBridge() {
   if (wss) return;
   wss = new ws.WebSocketServer({ host: "127.0.0.1", port: PORT });
+  wss.on("error", (error) => {
+    console.error(`Browser extension bridge could not listen on 127.0.0.1:${PORT}`, error);
+    wss?.close();
+    wss = null;
+  });
   wss.on("connection", (socket) => {
     socket.once("message", (data) => {
       let first;
@@ -420,7 +647,8 @@ function startBrowserBridge() {
         socket.close();
         return;
       }
-      if (first.type !== "auth" || first.token !== getOrCreatePairingToken()) {
+      const isAuthorized = first.type === "auth" && (first.token === DEV_PAIRING_TOKEN || first.token === getOrCreatePairingToken());
+      if (!isAuthorized) {
         socket.close();
         return;
       }
@@ -460,9 +688,16 @@ async function listOpenTabs(domain) {
   const result = await sendRequest("listTabs", { domain });
   return result?.tabs ?? [];
 }
+let lastKnownHistory = null;
 async function searchHistoryByDomain(domain) {
   const result = await sendRequest("searchHistoryByDomain", { domain });
-  return result?.items ?? [];
+  const items = result?.items;
+  if (items) {
+    lastKnownHistory = { domain, items };
+    return items;
+  }
+  if (lastKnownHistory && lastKnownHistory.domain === domain) return lastKnownHistory.items;
+  return [];
 }
 function registerBrowserIpc() {
   electron.ipcMain.handle("browser:listOpenTabs", () => listOpenTabs(getSettings().browserDomainFilter));
@@ -472,13 +707,20 @@ function registerBrowserIpc() {
     connected: isExtensionConnected()
   }));
 }
+function registerArchiveIpc() {
+  electron.ipcMain.handle("archive:list", () => listArchivedTimers());
+  electron.ipcMain.handle("archive:clear", () => clearArchive());
+  electron.ipcMain.handle("stats:getWeekly", () => getWeeklyStats());
+}
 const BAR_WIDTH = 88;
 const BAR_WIDE_WIDTH = BAR_WIDTH * 4;
-const BAR_ROW_HEIGHT = 40;
-const SEE_MORE_HEIGHT = 18;
+const BAR_ROW_HEIGHT = 44;
+const SEE_MORE_HEIGHT = 36;
 const PANEL_SIZE = { width: 320, height: 440 };
 const EDGE_MARGIN = 8;
 const MOVE_SAVE_DEBOUNCE_MS = 300;
+const RESIZE_ANIMATION_MS = 140;
+const RESIZE_ANIMATION_STEP_MS = 8;
 let overlayWindow = null;
 let expanded = false;
 let barWide = false;
@@ -487,11 +729,44 @@ let moveSaveTimer = null;
 let dragActive = false;
 let dragAnchorCursorY = 0;
 let dragAnchorWindowY = 0;
+let resizeAnimationTimer = null;
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+function animateBoundsTo(target) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (resizeAnimationTimer) {
+    clearInterval(resizeAnimationTimer);
+    resizeAnimationTimer = null;
+  }
+  const start = overlayWindow.getBounds();
+  const startedAt = Date.now();
+  resizeAnimationTimer = setInterval(() => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) {
+      if (resizeAnimationTimer) clearInterval(resizeAnimationTimer);
+      resizeAnimationTimer = null;
+      return;
+    }
+    const t = Math.min(1, (Date.now() - startedAt) / RESIZE_ANIMATION_MS);
+    const eased = easeOutCubic(t);
+    overlayWindow.setBounds({
+      x: Math.round(start.x + (target.x - start.x) * eased),
+      y: Math.round(start.y + (target.y - start.y) * eased),
+      width: Math.round(start.width + (target.width - start.width) * eased),
+      height: Math.round(start.height + (target.height - start.height) * eased)
+    });
+    if (t >= 1 && resizeAnimationTimer) {
+      clearInterval(resizeAnimationTimer);
+      resizeAnimationTimer = null;
+    }
+  }, RESIZE_ANIMATION_STEP_MS);
+}
 function collapsedHeight(workAreaHeight) {
-  const desired = BAR_ROW_HEIGHT * Math.max(1, activeTimerCount) + SEE_MORE_HEIGHT;
+  const rowCount = Math.max(1, activeTimerCount);
+  const desired = BAR_ROW_HEIGHT * rowCount + Math.max(0, rowCount - 1) + SEE_MORE_HEIGHT;
   return Math.min(desired, workAreaHeight - 2 * EDGE_MARGIN);
 }
 function currentSize(workAreaHeight, isExpanded) {
@@ -512,7 +787,12 @@ function computeBounds(dockSide, isExpanded, dockYOffset) {
 function repositionOverlay() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
   const { dockSide, dockYOffset } = getSettings();
-  overlayWindow.setBounds(computeBounds(dockSide, expanded, dockYOffset));
+  const target = computeBounds(dockSide, expanded, dockYOffset);
+  if (dragActive) {
+    overlayWindow.setBounds(target);
+    return;
+  }
+  animateBoundsTo(target);
 }
 function scheduleSaveOfDraggedPosition() {
   if (expanded || !overlayWindow || overlayWindow.isDestroyed()) return;
@@ -576,6 +856,10 @@ function setBarWide(wide) {
 }
 function dragStart() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  if (resizeAnimationTimer) {
+    clearInterval(resizeAnimationTimer);
+    resizeAnimationTimer = null;
+  }
   dragActive = true;
   dragAnchorCursorY = electron.screen.getCursorScreenPoint().y;
   dragAnchorWindowY = overlayWindow.getBounds().y;
@@ -606,14 +890,11 @@ function registerOverlayIpc() {
   electron.ipcMain.on("overlay:dragMove", () => dragUpdate());
   electron.ipcMain.on("overlay:dragEnd", () => dragEnd());
 }
-let quitting = false;
-function isQuitting() {
-  return quitting;
-}
-function setQuitting(value) {
-  quitting = value;
-}
 let dashboardWindow = null;
+let isQuitting = false;
+electron.app.on("before-quit", () => {
+  isQuitting = true;
+});
 function createDashboardWindow() {
   if (dashboardWindow && !dashboardWindow.isDestroyed()) return dashboardWindow;
   dashboardWindow = new electron.BrowserWindow({
@@ -631,7 +912,7 @@ function createDashboardWindow() {
   });
   dashboardWindow.on("ready-to-show", () => dashboardWindow?.show());
   dashboardWindow.on("close", (event) => {
-    if (!isQuitting()) {
+    if (!isQuitting) {
       event.preventDefault();
       dashboardWindow?.hide();
     }
@@ -656,21 +937,53 @@ function showDashboardWindow() {
 function registerDashboardIpc() {
   electron.ipcMain.handle("dashboard:show", () => showDashboardWindow());
 }
-let tray = null;
-function createPlaceholderIcon() {
-  const size = 16;
-  const buffer = Buffer.alloc(size * size * 4);
-  for (let i = 0; i < size * size; i++) {
-    const offset = i * 4;
-    buffer[offset] = 11;
-    buffer[offset + 1] = 158;
-    buffer[offset + 2] = 245;
-    buffer[offset + 3] = 255;
+let statsWindow = null;
+function createStatsWindow() {
+  if (statsWindow && !statsWindow.isDestroyed()) return statsWindow;
+  statsWindow = new electron.BrowserWindow({
+    width: 560,
+    height: 720,
+    minWidth: 420,
+    minHeight: 480,
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/stats.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  statsWindow.on("ready-to-show", () => statsWindow?.show());
+  statsWindow.on("closed", () => {
+    statsWindow = null;
+  });
+  statsWindow.webContents.setWindowOpenHandler(({ url }) => {
+    electron.shell.openExternal(url);
+    return { action: "deny" };
+  });
+  if (process.env["ELECTRON_RENDERER_URL"]) {
+    statsWindow.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/stats/`);
+  } else {
+    statsWindow.loadFile(path.join(__dirname, "../renderer/stats/index.html"));
   }
-  return electron.nativeImage.createFromBitmap(buffer, { width: size, height: size });
+  return statsWindow;
+}
+function showStatsWindow() {
+  const win = createStatsWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+function registerStatsWindowIpc() {
+  electron.ipcMain.handle("stats:show", () => showStatsWindow());
+}
+let tray = null;
+function createTrayIcon() {
+  const iconPath = electron.app.isPackaged ? path.join(process.resourcesPath, "icon.ico") : path.join(electron.app.getAppPath(), "build", "icon.ico");
+  return electron.nativeImage.createFromPath(iconPath);
 }
 function createTray() {
-  tray = new electron.Tray(createPlaceholderIcon());
+  tray = new electron.Tray(createTrayIcon());
   tray.setToolTip("Time Tracker");
   tray.on("click", () => showDashboardWindow());
   refreshTrayMenu();
@@ -688,7 +1001,6 @@ function refreshTrayMenu() {
     {
       label: "Quit Time Tracker",
       click: () => {
-        setQuitting(true);
         electron.app.quit();
       }
     }
@@ -721,6 +1033,7 @@ const gotSingleInstanceLock = electron.app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   electron.app.quit();
 } else {
+  electron.app.setAppUserModelId("com.timetrackinghelper.app");
   electron.app.on("second-instance", () => {
     showDashboardWindow();
   });
@@ -733,6 +1046,8 @@ if (!gotSingleInstanceLock) {
     registerShellIpc();
     registerDashboardIpc();
     registerBrowserIpc();
+    registerArchiveIpc();
+    registerStatsWindowIpc();
     createOverlayWindow();
     createTray();
     startIdleMonitor();
@@ -743,7 +1058,6 @@ if (!gotSingleInstanceLock) {
       setActiveTimerCount(countActiveTimers(snapshot));
     });
   });
-  electron.app.on("before-quit", () => setQuitting(true));
   electron.app.on("window-all-closed", () => {
   });
 }

@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "./.tsbuild/web-stats",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
+  },
+  "include": [
+    "src/renderer/stats/**/*",
+    "src/renderer/components/TimerRows.tsx",
+    "src/renderer/components/ui.tsx",
+    "src/renderer/components/timerDisplay.ts",
+    "src/shared/**/*",
+    "src/preload/stats.ts"
+  ]
+}

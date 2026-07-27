@@ -4,6 +4,13 @@ Personal Windows time-tracking app: Electron + React + TypeScript, a transparent
 overlay bar/panel, a dashboard window, and a companion Chrome extension for tagging timers against
 open tabs / browser history.
 
+## Documentation
+
+- [Project architecture](docs/architecture.md): how React, Electron, IPC, SQLite, and the browser extension fit together.
+- [Electron primer](docs/electron.md): Electron's process model, security boundaries, native capabilities, and useful next features.
+- [Windows release guide](docs/release.md): build and distribute the Windows installer and extension archive.
+- [Chrome Web Store submission material](docs/chrome-web-store-submission.md): store copy, permission explanations, and privacy policy.
+
 ## Prerequisites
 
 - Node.js (developed against v22.x)
@@ -31,9 +38,10 @@ agent's) is already running and holding it.
 src/main/            Electron main process — windows, IPC handlers, SQLite/Drizzle, timer state
 src/main/db/          schema.ts (Drizzle mirror) + migrations/*.sql (actual DDL source of truth)
 src/preload/          contextBridge preloads — one per window (dashboard.ts, overlay.ts)
-src/renderer/         dashboard/, overlay/ (separate Vite entries), shared/ (used by both)
+src/renderer/         dashboard/, overlay/ (separate Vite entries), components/ (used by both)
 src/shared/           types.ts, format.ts — shared between main and renderer via the @shared alias
 browser-extension/    Manifest V3 Chrome extension (loaded unpacked, not built/bundled)
+docs/                 architecture and Electron tutorials
 ```
 
 The three renderer/main/preload TypeScript projects are checked independently:
@@ -47,18 +55,20 @@ npx tsc --noEmit -p tsconfig.web.overlay.json
 ## Browser extension setup
 
 The extension reports currently-open Chrome tabs and domain-filtered browsing history to the app
-(shown in the tag picker's "Open" and "History" views), and can auto-click Jira's "Log work" button
-when you open a tag's link from history. It talks to the app over a local WebSocket
+(shown in the tag picker's "Open" and "History" views). It talks to the app over a local WebSocket
 (`ws://127.0.0.1:51834`) that the app hosts — the extension is always the connecting client.
 
 1. **Load the extension**: open `chrome://extensions`, enable **Developer mode** (top right), click
    **Load unpacked**, and select the `browser-extension/` folder in this repo.
-2. **Copy the pairing token**: open the dashboard window, find the **Browser extension** section —
-   it shows a token and a Copy button.
-3. **Paste the token**: open the extension's options page (`chrome://extensions` → the extension's
-   card → **Details** → **Extension options**, or right-click its toolbar icon → **Options**),
-   paste the token, click **Save**.
-4. Within a few seconds the dashboard's status dot should flip from "Not connected" to "Connected"
+2. **No pairing step needed**: the app always accepts a fixed constant token (`DEV_PAIRING_TOKEN`
+   in `browserBridge.ts`), dev or packaged, and the extension tries that same constant automatically
+   whenever it has no token saved — so it just connects on its own. This is deliberately open
+   (no secret required) since the WS server only ever listens on `127.0.0.1` for this one app on
+   this one machine. If you'd rather require a real per-install token, the dashboard's **Browser
+   extension** section still shows one (with a Copy button) that you can paste into the extension's
+   options page (`chrome://extensions` → the extension's card → **Details** → **Extension options**)
+   — but it's optional now, not required.
+3. Within a few seconds the dashboard's status dot should flip from "Not connected" to "Connected"
    (it polls every 3s). If it doesn't, check the extension's service worker console
    (`chrome://extensions` → **service worker** link on the card) for connection errors.
 

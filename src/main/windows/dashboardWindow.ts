@@ -1,8 +1,12 @@
 import path from 'node:path'
-import { BrowserWindow, ipcMain, shell } from 'electron'
-import { isQuitting } from '../appState'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 
 let dashboardWindow: BrowserWindow | null = null
+let isQuitting = false
+
+app.on('before-quit', () => {
+  isQuitting = true
+})
 
 export function createDashboardWindow(): BrowserWindow {
   if (dashboardWindow && !dashboardWindow.isDestroyed()) return dashboardWindow
@@ -24,7 +28,7 @@ export function createDashboardWindow(): BrowserWindow {
   dashboardWindow.on('ready-to-show', () => dashboardWindow?.show())
 
   dashboardWindow.on('close', (event) => {
-    if (!isQuitting()) {
+    if (!isQuitting) {
       event.preventDefault()
       dashboardWindow?.hide()
     }

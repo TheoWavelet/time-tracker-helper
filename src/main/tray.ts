@@ -1,25 +1,19 @@
+import path from 'node:path'
 import { app, Menu, nativeImage, Tray } from 'electron'
 import { showDashboardWindow } from './windows/dashboardWindow'
 import { getSnapshot, pauseTimer } from './timerStore'
-import { setQuitting } from './appState'
 
 let tray: Tray | null = null
 
-function createPlaceholderIcon(): Electron.NativeImage {
-  const size = 16
-  const buffer = Buffer.alloc(size * size * 4)
-  for (let i = 0; i < size * size; i++) {
-    const offset = i * 4
-    buffer[offset] = 0x0b // B
-    buffer[offset + 1] = 0x9e // G
-    buffer[offset + 2] = 0xf5 // R (amber)
-    buffer[offset + 3] = 0xff // A
-  }
-  return nativeImage.createFromBitmap(buffer, { width: size, height: size })
+function createTrayIcon(): Electron.NativeImage {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.ico')
+    : path.join(app.getAppPath(), 'build', 'icon.ico')
+  return nativeImage.createFromPath(iconPath)
 }
 
 export function createTray(): Tray {
-  tray = new Tray(createPlaceholderIcon())
+  tray = new Tray(createTrayIcon())
   tray.setToolTip('Time Tracker')
   tray.on('click', () => showDashboardWindow())
   refreshTrayMenu()
@@ -42,7 +36,6 @@ export function refreshTrayMenu(): void {
     {
       label: 'Quit Time Tracker',
       click: () => {
-        setQuitting(true)
         app.quit()
       }
     }

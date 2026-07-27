@@ -4,9 +4,11 @@ const api = {
   timers: {
     getSnapshot: () => electron.ipcRenderer.invoke("timers:getSnapshot"),
     start: (input) => electron.ipcRenderer.invoke("timers:start", input),
+    createCustomLog: (input) => electron.ipcRenderer.invoke("timers:createCustomLog", input),
     pause: (id) => electron.ipcRenderer.invoke("timers:pause", id),
     resume: (id) => electron.ipcRenderer.invoke("timers:resume", id),
     stop: (id) => electron.ipcRenderer.invoke("timers:stop", id),
+    delete: (id) => electron.ipcRenderer.invoke("timers:delete", id),
     onChanged: (callback) => {
       const listener = (_event, snapshot) => callback(snapshot);
       electron.ipcRenderer.on("timers:changed", listener);

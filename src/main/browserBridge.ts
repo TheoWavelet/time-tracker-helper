@@ -6,6 +6,12 @@ import type { DomainHistoryItem, OpenTabInfo } from '@shared/types'
 const PORT = 51834
 const REQUEST_TIMEOUT_MS = 2000
 
+// A fixed, publicly-known value on purpose — always accepted, dev or packaged, alongside the real
+// per-install token, so the extension can just connect with zero pairing step at all (this is a
+// single-user local app; the WS server only ever listens on 127.0.0.1). The extension tries this
+// constant whenever it has no token saved (see background.js).
+const DEV_PAIRING_TOKEN = 'dev-pairing-token-insecure-local-only'
+
 interface IncomingMessage {
   type?: string
   requestId?: string
@@ -51,6 +57,12 @@ export function startBrowserBridge(): void {
   if (wss) return
   wss = new WebSocketServer({ host: '127.0.0.1', port: PORT })
 
+  wss.on('error', (error) => {
+    console.error(`Browser extension bridge could not listen on 127.0.0.1:${PORT}`, error)
+    wss?.close()
+    wss = null
+  })
+
   wss.on('connection', (socket) => {
     socket.once('message', (data) => {
       let first: IncomingMessage
@@ -60,7 +72,8 @@ export function startBrowserBridge(): void {
         socket.close()
         return
       }
-      if (first.type !== 'auth' || first.token !== getOrCreatePairingToken()) {
+      const isAuthorized = first.type === 'auth' && (first.token === DEV_PAIRING_TOKEN || first.token === getOrCreatePairingToken())
+      if (!isAuthorized) {
         socket.close()
         return
       }
@@ -104,10 +117,24 @@ function sendRequest(type: string, params: Record<string, unknown> = {}): Promis
 
 export async function listOpenTabs(domain: string): Promise<OpenTabInfo[]> {
   const result = await sendRequest('listTabs', { domain })
+  // Deliberately no fallback cache here, unlike history below — a stale "open tabs" list would
+  // actively lie about what's currently open once Chrome's gone, rather than just being outdated.
   return (result?.tabs as OpenTabInfo[] | undefined) ?? []
 }
 
+/** Last successful history fetch, kept per-domain so a stale result is never shown for a domain
+ *  filter it doesn't actually match. Lives only in memory — resets on app restart. */
+let lastKnownHistory: { domain: string; items: DomainHistoryItem[] } | null = null
+
 export async function searchHistoryByDomain(domain: string): Promise<DomainHistoryItem[]> {
   const result = await sendRequest('searchHistoryByDomain', { domain })
-  return (result?.items as DomainHistoryItem[] | undefined) ?? []
+  const items = result?.items as DomainHistoryItem[] | undefined
+  if (items) {
+    lastKnownHistory = { domain, items }
+    return items
+  }
+  // Extension unreachable (e.g. Chrome is closed) — history doesn't stop being true just because
+  // Chrome isn't running right now, so keep showing the last known results instead of going blank.
+  if (lastKnownHistory && lastKnownHistory.domain === domain) return lastKnownHistory.items
+  return []
 }

@@ -1,16 +1,68 @@
 {
   "name": "time-tracking-helper",
-  "version": "0.1.0",
+  "version": "1.0.3",
   "description": "Personal Windows time-tracking overlay app",
   "main": "./out/main/index.js",
-  "author": "",
+  "author": "Time Tracker Contributors",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
     "build": "tsc --build --clean && electron-vite build",
     "start": "electron-vite preview",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "dist": "npm run generate:icons && npm run build && electron-builder --win nsis",
+    "package:extension": "npm run generate:icons && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
     "postinstall": "electron-builder install-app-deps",
     "test": "vitest run"
+  },
+  "build": {
+    "appId": "com.timetrackinghelper.app",
+    "productName": "Time Tracker",
+    "artifactName": "Time-Tracker-${version}-Setup.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "!**/.vscode/*",
+      "!src/*",
+      "!browser-extension/*",
+      "!docs/*",
+      "!*.ts",
+      "!tsconfig*.json",
+      "!electron.vite.config.*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
