@@ -34,6 +34,7 @@ const api = {
   },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
+    setOverlayDotMode: (value: boolean): Promise<AppSettings> => ipcRenderer.invoke('settings:setOverlayDotMode', value),
     onChanged: (callback: (settings: AppSettings) => void): (() => void) => {
       const listener = (_event: unknown, settings: AppSettings): void => callback(settings)
       ipcRenderer.on('settings:changed', listener)

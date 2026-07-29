@@ -4,6 +4,7 @@ import * as timersRepo from './db/repositories/timers.repo'
 import { startClockworkTimer, stopClockworkTimer } from './clockworkClient'
 import { getSettings } from './settingsStore'
 import { hasClockworkApiToken } from './clockworkTokenStore'
+import type { TimerKind } from '@shared/types'
 
 // issueKey -> timerId currently mirrored as "running" on Clockwork's side. Used both to avoid
 // redundant calls and as the safety-net list to flush on quit/sleep/lock.
@@ -16,9 +17,13 @@ const activeMirrors = new Map<string, string>()
 const unreliableTimerIds = new Set<string>()
 
 // timerId -> true once notifyTimerRunning has actually attempted to mirror it to Clockwork at least
-// once. A custom log is inserted directly as "paused" and never runs through notifyTimerRunning, so
+// once. Only consulted for custom logs (see notifyTimerSaved) — a custom log is inserted directly
+// as "paused" and never runs through notifyTimerRunning unless the user explicitly resumes it, so
 // without this a save would see "no active mirror" and wrongly read that as "already fully synced"
-// rather than "never synced at all" — this set is what tells the two apart.
+// rather than "never synced at all". Regular timers don't need this check: by the time one is
+// saved, either it's still live (handled below) or its last segment already closed out via
+// notifyTimerSegmentEnded in *some* session — including a prior one, since Clockwork's own record
+// of that doesn't depend on this process's in-memory state surviving a restart.
 const engagedTimerIds = new Set<string>()
 
 function isSyncActive(): boolean {
@@ -56,7 +61,7 @@ export async function notifyTimerSegmentEnded(timerId: string, tagId: string | n
  *  so the caller can mark it "logged automatically." If the timer was already paused (its last
  *  segment closed out via notifyTimerSegmentEnded), there's nothing live left to stop — that's a
  *  success, not a failure, and calling stop_timer again would just fail since nothing is running. */
-export async function notifyTimerSaved(timerId: string, tagId: string | null): Promise<boolean> {
+export async function notifyTimerSaved(timerId: string, tagId: string | null, kind: TimerKind): Promise<boolean> {
   if (!isSyncActive()) return false
   const issueKey = resolveIssueKey(tagId)
   if (!issueKey) return false
@@ -67,7 +72,9 @@ export async function notifyTimerSaved(timerId: string, tagId: string | null): P
     if (!ok) unreliableTimerIds.add(timerId)
   }
 
-  const reliable = engagedTimerIds.has(timerId) && !unreliableTimerIds.has(timerId)
+  // Custom logs are the only kind that can reach here having never actually been mirrored at all
+  // (see engagedTimerIds above) — everything else just needs to not have failed along the way.
+  const reliable = (kind !== 'custom_log' || engagedTimerIds.has(timerId)) && !unreliableTimerIds.has(timerId)
   unreliableTimerIds.delete(timerId)
   engagedTimerIds.delete(timerId)
   return reliable

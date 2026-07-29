@@ -1,17 +1,38 @@
 import { randomUUID } from 'node:crypto'
-import { and, count, desc, eq, isNull, max } from 'drizzle-orm'
+import { and, count, desc, eq, isNotNull, isNull, max } from 'drizzle-orm'
 import { getDb } from '../connection'
 import { tags, timers } from '../schema'
 import type { TagDTO, TagPickerEntry } from '@shared/types'
 
 // Jira issue keys are a project key (2+ letters/digits, starting with a letter) plus a hyphen and
-// a number, e.g. "SSP-13" — matched anywhere in the URL (browse links, query params, etc.).
-const JIRA_ISSUE_KEY_PATTERN = /\b([A-Z][A-Z0-9]+-\d+)\b/
+// a number, e.g. "SSP-13".
+const JIRA_ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/
+// Matches a classic Jira "browse" URL, e.g. https://foo.atlassian.net/browse/SSP-13(/anything).
+const JIRA_BROWSE_PATH_PATTERN = /\/browse\/([A-Z][A-Z0-9]+-\d+)(?:[/?#]|$)/
 
+/**
+ * Deliberately conservative: earlier this scanned the whole URL for anything shaped like
+ * "LETTERS-NUMBER" anywhere in it, which false-positived constantly on ordinary web pages (version
+ * strings like "UTF-8", article slugs, tracking IDs, ...) and made completely unrelated pages show
+ * up as "logged automatically." Only two structures actually mean "this URL points at a Jira issue":
+ * a /browse/KEY path segment, or a query param whose value IS an issue key (not just contains one).
+ */
 export function deriveClockworkIssueKey(targetUrl: string | null): string | null {
   if (!targetUrl) return null
-  const match = targetUrl.match(JIRA_ISSUE_KEY_PATTERN)
-  return match ? match[1] : null
+
+  const browseMatch = targetUrl.match(JIRA_BROWSE_PATH_PATTERN)
+  if (browseMatch) return browseMatch[1]
+
+  let parsed: URL
+  try {
+    parsed = new URL(targetUrl)
+  } catch {
+    return null
+  }
+  for (const value of parsed.searchParams.values()) {
+    if (JIRA_ISSUE_KEY_PATTERN.test(value)) return value
+  }
+  return null
 }
 
 function mapRow(row: typeof tags.$inferSelect): TagDTO {
@@ -91,7 +112,10 @@ export function findOrCreateTagByLabel(label: string): TagDTO {
  * Used when picking a browser tab or history entry in the tag picker. Existing tags win by label
  * (same lookup as findOrCreateTagByLabel) — a blank target_url gets backfilled to the picked URL,
  * but an existing different target_url is left alone rather than silently overwriting it. Either
- * way, the Clockwork issue key is (re)derived from whatever target_url ends up set.
+ * way, the Clockwork issue key is *re-derived* (not trusted from whatever's already stored) from
+ * whatever target_url ends up set — this is what self-heals a tag that got mis-tagged by an older,
+ * looser version of deriveClockworkIssueKey the moment it's picked again, rather than needing to
+ * wait for the next app restart's backfillClockworkIssueKeys() pass.
  */
 export function findOrCreateTagByLabelAndUrl(label: string, url: string): TagPickerEntry {
   const trimmedLabel = label.trim()
@@ -99,10 +123,12 @@ export function findOrCreateTagByLabelAndUrl(label: string, url: string): TagPic
   const existing = findTagByLabel(trimmedLabel)
 
   if (existing) {
-    if (!existing.targetUrl) {
+    const effectiveUrl = existing.targetUrl || trimmedUrl
+    const derivedIssueKey = deriveClockworkIssueKey(effectiveUrl)
+    if (!existing.targetUrl || derivedIssueKey !== existing.clockworkIssueKey) {
       getDb()
         .update(tags)
-        .set({ targetUrl: trimmedUrl, clockworkIssueKey: deriveClockworkIssueKey(trimmedUrl), updatedAt: Date.now() })
+        .set({ targetUrl: effectiveUrl, clockworkIssueKey: derivedIssueKey, updatedAt: Date.now() })
         .where(eq(tags.id, existing.id))
         .run()
     }
@@ -138,17 +164,22 @@ export function toggleTagFavorite(id: string): TagPickerEntry {
   return updated
 }
 
-/** One-time startup pass: fills in clockworkIssueKey for tags created before that column existed. */
+/**
+ * Startup pass over every tag with a URL: fills in a missing clockworkIssueKey (tags created before
+ * that column existed) and re-derives existing ones (so a stricter/fixed deriveClockworkIssueKey —
+ * e.g. the false-positive-prone version that used to match any "LETTERS-NUMBER" substring anywhere
+ * in the URL — corrects tags it previously mis-tagged, not just ones it previously missed).
+ */
 export function backfillClockworkIssueKeys(): void {
   const rows = getDb()
-    .select({ id: tags.id, targetUrl: tags.targetUrl })
+    .select({ id: tags.id, targetUrl: tags.targetUrl, clockworkIssueKey: tags.clockworkIssueKey })
     .from(tags)
-    .where(and(isNull(tags.clockworkIssueKey)))
+    .where(isNotNull(tags.targetUrl))
     .all()
 
   for (const row of rows) {
     const derived = deriveClockworkIssueKey(row.targetUrl)
-    if (derived) {
+    if (derived !== row.clockworkIssueKey) {
       getDb().update(tags).set({ clockworkIssueKey: derived }).where(eq(tags.id, row.id)).run()
     }
   }

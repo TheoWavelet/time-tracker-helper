@@ -126,7 +126,7 @@ export function stopTimer(id: string): void {
   emitChange()
 
   if (stopped) {
-    void clockworkSync.notifyTimerSaved(id, stopped.tagId).then((logged) => {
+    void clockworkSync.notifyTimerSaved(id, stopped.tagId, stopped.kind).then((logged) => {
       if (logged) {
         timersRepo.markClockworkLogged(id)
         emitChange()

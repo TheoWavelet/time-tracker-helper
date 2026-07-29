@@ -31,7 +31,12 @@ body,
   text-shadow: 0px 0px 3px rgba(2, 2, 2, 0.85);
 }
 
+/* .bar-container is remounted fresh on every widen/narrow/dot transition (a new JSX return branch
+   each time — see App.tsx), so panel-fade-in below already replays on its own for every one of
+   those; a separate is-resizing dip/transition used to be layered on top here too, and the two
+   together just produced two back-to-back opacity animations instead of one clean fade. */
 .bar-container {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -52,6 +57,59 @@ body,
 
 .bar-stack:active {
   cursor: grabbing;
+}
+
+/* Dot mode's resting state — replaces .bar-stack entirely while collapsed and not hovered (see
+   App.tsx). Pinned via absolute positioning to whichever screen edge the overlay is docked to
+   (rather than centered in the container), so while it's actually on screen — at rest, and during
+   the DOT_HOVER_DELAY_MS dwell before a hover commits to widening — it stays at a fixed screen
+   position rather than drifting as .bar-container's own width changes. Always fully opaque at the
+   peak of its flash, unlike the bar's subtler paused-alert tint, since it's the only signal dot
+   mode gives while collapsed. */
+.overlay-dot {
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  cursor: default;
+}
+
+.overlay-dot--dock-left {
+  left: 0;
+}
+
+.overlay-dot--dock-right {
+  right: 0;
+}
+
+.overlay-dot--running {
+  animation: overlay-dot-flash-blue 1.6s ease-in-out infinite;
+}
+
+.overlay-dot--idle {
+  animation: overlay-dot-flash-red 1.6s ease-in-out infinite;
+}
+
+@keyframes overlay-dot-flash-blue {
+  0%,
+  100% {
+    background: rgba(56, 189, 248, 0.55);
+  }
+  50% {
+    background: rgba(56, 189, 248, 1);
+  }
+}
+
+@keyframes overlay-dot-flash-red {
+  0%,
+  100% {
+    background: rgba(220, 38, 38, 0.55);
+  }
+  50% {
+    background: rgba(220, 38, 38, 1);
+  }
 }
 
 .see-more {
@@ -239,6 +297,15 @@ body,
 
 .panel__history-button {
   padding: 5px !important;
+}
+
+.panel__dot-toggle.is-active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.18);
+}
+
+.panel__dot-toggle.is-active:hover {
+  background: rgba(56, 189, 248, 0.28);
 }
 
 .panel__collapse {
@@ -545,7 +612,6 @@ body,
   margin-top: 4px;
 }
 
-
 /* Tag-or-title combobox: one field doubles as a plain title input and a tag autocomplete. */
 .tag-picker {
   position: relative;
@@ -685,7 +751,6 @@ body,
 .tag-picker__favorite-btn.is-favorite {
   color: #f59e0b;
 }
-
 
 .tag-picker__empty {
   padding: 10px 8px;

@@ -8,6 +8,9 @@ const BAR_WIDE_WIDTH = BAR_WIDTH * 4
 const BAR_ROW_HEIGHT = 44
 const SEE_MORE_HEIGHT = 36
 const PANEL_SIZE = { width: 320, height: 440 }
+// Matches the dot's own rendered size (see .overlay-dot in overlay.css) — the window just needs to
+// be at least that big so the dot isn't clipped.
+const DOT_HIT_SIZE = 20
 const EDGE_MARGIN = 8
 const MOVE_SAVE_DEBOUNCE_MS = 300
 const RESIZE_ANIMATION_MS = 140
@@ -33,9 +36,24 @@ function easeOutCubic(t: number): number {
 
 /**
  * Windows' `setBounds()` has no built-in animation (unlike macOS), so this steps toward the
- * target itself. Restarting from the window's CURRENT bounds (not the previous target) means an
- * interrupted animation — e.g. a hover flipping again mid-transition — redirects smoothly instead
- * of snapping back to where the last animation started.
+ * target itself. Only HEIGHT is ever interpolated. x/y/width jump straight to their target values
+ * up front — every dock-side anchor (xForDockSide) recomputes x as a function of the CURRENT
+ * width, so interpolating width meant interpolating x right along with it, which is exactly what
+ * made the overlay visibly drift sideways mid-resize (most noticeable widening out of dot mode).
+ * Applying the target width/x/y immediately removes the intermediate values that drift was a
+ * function of — there's no longer any width in between start and target for x to react to.
+ *
+ * Deliberately does NOT also fade via BrowserWindow.setOpacity() to mask the instant jump — an
+ * earlier version did that, calling it on every tick of this same interval, and it broke dot-mode
+ * hover: repeated native opacity changes during the resize compounded the already-documented risk
+ * (see BAR_NARROW_DELAY_MS in App.tsx) of Chromium firing a spurious mouseleave mid-resize, and
+ * unlike a plain bounds change the resulting leave wasn't reliably followed by a re-entering event,
+ * so the widen got cancelled and the bar snapped back to a dot before the hover ever visibly
+ * completed. Any opacity fade belongs on the renderer side instead — .bar-container/.panel already
+ * replay their own panel-fade-in mount animation on every widen/narrow/expand/collapse (each is a
+ * fresh JSX return branch, so a fresh element — see overlay.css), which is enough on its own; a
+ * second, separately-driven CSS opacity dip was tried here too and just produced two back-to-back
+ * fades instead of one clean one.
  */
 function animateBoundsTo(target: { x: number; y: number; width: number; height: number }): void {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
@@ -45,6 +63,13 @@ function animateBoundsTo(target: { x: number; y: number; width: number; height: 
   }
 
   const start = overlayWindow.getBounds()
+  if (start.x === target.x && start.y === target.y && start.width === target.width && start.height === target.height) {
+    return
+  }
+
+  overlayWindow.setBounds({ x: target.x, y: target.y, width: target.width, height: start.height })
+
+  const startHeight = start.height
   const startedAt = Date.now()
 
   resizeAnimationTimer = setInterval(() => {
@@ -56,10 +81,10 @@ function animateBoundsTo(target: { x: number; y: number; width: number; height: 
     const t = Math.min(1, (Date.now() - startedAt) / RESIZE_ANIMATION_MS)
     const eased = easeOutCubic(t)
     overlayWindow.setBounds({
-      x: Math.round(start.x + (target.x - start.x) * eased),
-      y: Math.round(start.y + (target.y - start.y) * eased),
-      width: Math.round(start.width + (target.width - start.width) * eased),
-      height: Math.round(start.height + (target.height - start.height) * eased)
+      x: target.x,
+      y: target.y,
+      width: target.width,
+      height: Math.round(startHeight + (target.height - startHeight) * eased)
     })
     if (t >= 1 && resizeAnimationTimer) {
       clearInterval(resizeAnimationTimer)
@@ -79,6 +104,9 @@ function collapsedHeight(workAreaHeight: number): number {
 
 function currentSize(workAreaHeight: number, isExpanded: boolean): { width: number; height: number } {
   if (isExpanded) return PANEL_SIZE
+  // Dot mode only replaces the *resting* (un-hovered) size — once hovered enough to widen, it's
+  // the same wide bar dot mode's off, just reached via a longer hover dwell (see overlay/App.tsx).
+  if (!barWide && getSettings().overlayDotMode) return { width: DOT_HIT_SIZE, height: DOT_HIT_SIZE }
   return { width: barWide ? BAR_WIDE_WIDTH : BAR_WIDTH, height: collapsedHeight(workAreaHeight) }
 }
 
@@ -115,9 +143,26 @@ function repositionOverlay(): void {
   animateBoundsTo(target)
 }
 
-/** Debounced so a native drag (which fires 'move' continuously) doesn't hammer disk writes. */
+/**
+ * Debounced so a native drag (which fires 'move' continuously) doesn't hammer disk writes. Only
+ * persists moves that actually came from the user dragging (dragActive) — 'move' also fires for
+ * every purely programmatic reposition (dock-side toggle, the bar resizing for activeTimerCount,
+ * expand/collapse itself clamping near a screen edge, ...), and saving those as if they were a
+ * manual drag would silently convert an auto-centered overlay into a fixed-offset one, or drift its
+ * saved offset, without the user ever touching it. Checked here (when the 'move' fires), not
+ * inside the debounced callback — dragEnd() flips dragActive back off as soon as the mouse is
+ * released, well before this timer fires, so checking there would always see a finished drag as
+ * "not a drag" and silently drop its final position.
+ *
+ * Previously this instead guarded on `expanded`, skipping the save outright while the panel was
+ * open — meaning dragging the expanded panel and then collapsing it snapped back to wherever the
+ * bar was positioned before that drag, since dockYOffset was never updated to reflect it. It's now
+ * saved regardless of expanded/collapsed state: dockYOffset is just a top-of-window offset from the
+ * work area's top edge, independent of whatever height the current state happens to be, so it's
+ * equally valid whether it was captured from the small bar or the expanded panel.
+ */
 function scheduleSaveOfDraggedPosition(): void {
-  if (expanded || !overlayWindow || overlayWindow.isDestroyed()) return
+  if (!dragActive || !overlayWindow || overlayWindow.isDestroyed()) return
   if (moveSaveTimer) clearTimeout(moveSaveTimer)
   moveSaveTimer = setTimeout(() => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return
@@ -173,7 +218,9 @@ export function setOverlayExpanded(next: boolean): void {
   repositionOverlay()
 }
 
-export function applyDockSide(_dockSide: DockSide): void {
+/** Repositions/resizes the overlay after any settings change that affects its bounds (dock side,
+ *  dot mode, ...) — named for its original sole caller, but now a general layout-refresh trigger. */
+export function applyDockSide(): void {
   repositionOverlay()
 }
 

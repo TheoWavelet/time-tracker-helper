@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Time Tracker Bridge",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "Reports open tabs and domain-filtered history to the local Time Tracker desktop app.",
   "permissions": ["tabs", "history", "storage", "alarms"],
   "icons": {

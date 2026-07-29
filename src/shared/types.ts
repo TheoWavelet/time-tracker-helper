@@ -84,6 +84,9 @@ export interface AppSettings {
   highlightPausedTimers: boolean
   /** When on, the overlay's "No timer running" bar flashes red whenever there are no timers in it at all. */
   highlightNoTimers: boolean
+  /** When on, the collapsed overlay rests as a tiny colored dot instead of the timer bar, only
+   *  widening back out after a deliberate hover dwell — toggled from the overlay panel itself. */
+  overlayDotMode: boolean
   /** Substring match against tab/page URLs — restricts both open tabs and history to this domain. Blank = no filter. */
   browserDomainFilter: string
   /** Master on/off switch for the whole Clockwork integration — off by default even with a token set. */

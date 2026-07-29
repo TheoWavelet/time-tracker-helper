@@ -6,7 +6,8 @@ import {
   setDefaultLinkBrowser,
   setDockSide,
   setHighlightNoTimers,
-  setHighlightPausedTimers
+  setHighlightPausedTimers,
+  setOverlayDotMode
 } from '../settingsStore'
 import type { DockSide, LinkBrowser } from '@shared/types'
 
@@ -17,12 +18,14 @@ function broadcastSettings(): void {
   }
 }
 
-export function registerSettingsIpc(onDockSideChange: (dockSide: DockSide) => void): void {
+/** @param onLayoutChange refreshes the overlay's own bounds after a setting that affects its size
+ *  (dock side, dot mode) changes — everything else only needs the broadcast below. */
+export function registerSettingsIpc(onLayoutChange: () => void): void {
   ipcMain.handle('settings:get', () => getSettings())
 
   ipcMain.handle('settings:setDockSide', (_event, dockSide: DockSide) => {
     const updated = setDockSide(dockSide)
-    onDockSideChange(updated.dockSide)
+    onLayoutChange()
     broadcastSettings()
     return updated
   })
@@ -35,6 +38,13 @@ export function registerSettingsIpc(onDockSideChange: (dockSide: DockSide) => vo
 
   ipcMain.handle('settings:setHighlightNoTimers', (_event, value: boolean) => {
     const updated = setHighlightNoTimers(value)
+    broadcastSettings()
+    return updated
+  })
+
+  ipcMain.handle('settings:setOverlayDotMode', (_event, value: boolean) => {
+    const updated = setOverlayDotMode(value)
+    onLayoutChange()
     broadcastSettings()
     return updated
   })

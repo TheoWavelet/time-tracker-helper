@@ -97,6 +97,10 @@ export function ClockPlusIcon(): JSX.Element {
   return <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="7" cy="8" r="4.5" /><path d="M7 5.5V8l1.8 1.2M12.5 3.5v4M10.5 5.5h4" /></svg>
 }
 
+export function DotModeIcon(): JSX.Element {
+  return <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="3.5" /></svg>
+}
+
 export function ChevronDownIcon(): JSX.Element {
   return <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" /></svg>
 }
