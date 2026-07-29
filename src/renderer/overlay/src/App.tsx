@@ -213,6 +213,9 @@ export function App(): JSX.Element {
   const flashTriggerTimers = activeTimers.filter((t) => t.kind !== 'custom_log')
   const allActivePaused = flashTriggerTimers.length > 0 && flashTriggerTimers.every((t) => t.status === 'paused')
   const highlightPaused = (settings?.highlightPausedTimers ?? false) && allActivePaused
+  // Separate opt-in (default off): flags the overlay having nothing in it at all, not just
+  // everything-paused — off by default since an empty overlay isn't necessarily a forgotten timer.
+  const highlightNoTimers = (settings?.highlightNoTimers ?? false) && activeTimers.length === 0
 
   if (!expanded) {
     // The rows themselves are draggable+clickable (see BarRow); expanding only happens via the
@@ -222,7 +225,7 @@ export function App(): JSX.Element {
         <div className="bar-stack">
           {activeTimers.length === 0 ? (
             <div
-              className={`bar-row${barWide ? ' bar-row--wide' : ''}`}
+              className={`bar-row${barWide ? ' bar-row--wide' : ''}${highlightNoTimers ? ' bar-row--paused-alert' : ''}`}
               title="No timer running"
               onMouseDown={(e) => startWindowDrag(e)}
             >

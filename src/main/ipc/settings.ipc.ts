@@ -5,6 +5,7 @@ import {
   setClockworkSyncEnabled,
   setDefaultLinkBrowser,
   setDockSide,
+  setHighlightNoTimers,
   setHighlightPausedTimers
 } from '../settingsStore'
 import type { DockSide, LinkBrowser } from '@shared/types'
@@ -28,6 +29,12 @@ export function registerSettingsIpc(onDockSideChange: (dockSide: DockSide) => vo
 
   ipcMain.handle('settings:setHighlightPausedTimers', (_event, value: boolean) => {
     const updated = setHighlightPausedTimers(value)
+    broadcastSettings()
+    return updated
+  })
+
+  ipcMain.handle('settings:setHighlightNoTimers', (_event, value: boolean) => {
+    const updated = setHighlightNoTimers(value)
     broadcastSettings()
     return updated
   })

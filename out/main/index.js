@@ -477,6 +477,7 @@ const defaults = {
   dockSide: "right",
   dockYOffset: null,
   highlightPausedTimers: false,
+  highlightNoTimers: false,
   browserDomainFilter: "atlassian.net",
   // Off by default even once a token is set — this pushes real time entries to a shared work
   // system, so it should be a deliberate opt-in rather than switching on the moment a token exists.
@@ -489,6 +490,7 @@ function getSettings() {
     dockSide: store.get("dockSide"),
     dockYOffset: store.get("dockYOffset"),
     highlightPausedTimers: store.get("highlightPausedTimers"),
+    highlightNoTimers: store.get("highlightNoTimers"),
     browserDomainFilter: store.get("browserDomainFilter"),
     clockworkSyncEnabled: store.get("clockworkSyncEnabled"),
     defaultLinkBrowser: store.get("defaultLinkBrowser")
@@ -506,6 +508,10 @@ function setHighlightPausedTimers(value) {
   store.set("highlightPausedTimers", value);
   return getSettings();
 }
+function setHighlightNoTimers(value) {
+  store.set("highlightNoTimers", value);
+  return getSettings();
+}
 function setBrowserDomainFilter(value) {
   store.set("browserDomainFilter", value.trim());
   return getSettings();
@@ -520,6 +526,7 @@ function setDefaultLinkBrowser(value) {
 }
 const activeMirrors = /* @__PURE__ */ new Map();
 const unreliableTimerIds = /* @__PURE__ */ new Set();
+const engagedTimerIds = /* @__PURE__ */ new Set();
 function isSyncActive() {
   return getSettings().clockworkSyncEnabled && hasClockworkApiToken();
 }
@@ -531,6 +538,7 @@ async function notifyTimerRunning(timerId, tagId) {
   if (!isSyncActive()) return;
   const issueKey = resolveIssueKey(tagId);
   if (!issueKey) return;
+  engagedTimerIds.add(timerId);
   const ok = await startClockworkTimer(issueKey);
   if (ok) activeMirrors.set(issueKey, timerId);
   else unreliableTimerIds.add(timerId);
@@ -551,8 +559,9 @@ async function notifyTimerSaved(timerId, tagId) {
     const ok = await stopClockworkTimer(issueKey);
     if (!ok) unreliableTimerIds.add(timerId);
   }
-  const reliable = !unreliableTimerIds.has(timerId);
+  const reliable = engagedTimerIds.has(timerId) && !unreliableTimerIds.has(timerId);
   unreliableTimerIds.delete(timerId);
+  engagedTimerIds.delete(timerId);
   return reliable;
 }
 async function stopAllActiveMirrors() {
@@ -773,6 +782,11 @@ function registerSettingsIpc(onDockSideChange) {
   });
   electron.ipcMain.handle("settings:setHighlightPausedTimers", (_event, value) => {
     const updated = setHighlightPausedTimers(value);
+    broadcastSettings();
+    return updated;
+  });
+  electron.ipcMain.handle("settings:setHighlightNoTimers", (_event, value) => {
+    const updated = setHighlightNoTimers(value);
     broadcastSettings();
     return updated;
   });

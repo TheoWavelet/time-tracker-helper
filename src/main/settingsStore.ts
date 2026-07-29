@@ -5,6 +5,7 @@ const defaults: AppSettings = {
   dockSide: 'right',
   dockYOffset: null,
   highlightPausedTimers: false,
+  highlightNoTimers: false,
   browserDomainFilter: 'atlassian.net',
   // Off by default even once a token is set — this pushes real time entries to a shared work
   // system, so it should be a deliberate opt-in rather than switching on the moment a token exists.
@@ -19,6 +20,7 @@ export function getSettings(): AppSettings {
     dockSide: store.get('dockSide'),
     dockYOffset: store.get('dockYOffset'),
     highlightPausedTimers: store.get('highlightPausedTimers'),
+    highlightNoTimers: store.get('highlightNoTimers'),
     browserDomainFilter: store.get('browserDomainFilter'),
     clockworkSyncEnabled: store.get('clockworkSyncEnabled'),
     defaultLinkBrowser: store.get('defaultLinkBrowser')
@@ -37,6 +39,11 @@ export function setDockYOffset(dockYOffset: number | null): AppSettings {
 
 export function setHighlightPausedTimers(value: boolean): AppSettings {
   store.set('highlightPausedTimers', value)
+  return getSettings()
+}
+
+export function setHighlightNoTimers(value: boolean): AppSettings {
+  store.set('highlightNoTimers', value)
   return getSettings()
 }
 

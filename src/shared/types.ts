@@ -82,6 +82,8 @@ export interface AppSettings {
   dockYOffset: number | null
   /** When on, all active timers flash red whenever none of them are running (all paused, nothing tracking). */
   highlightPausedTimers: boolean
+  /** When on, the overlay's "No timer running" bar flashes red whenever there are no timers in it at all. */
+  highlightNoTimers: boolean
   /** Substring match against tab/page URLs — restricts both open tabs and history to this domain. Blank = no filter. */
   browserDomainFilter: string
   /** Master on/off switch for the whole Clockwork integration — off by default even with a token set. */

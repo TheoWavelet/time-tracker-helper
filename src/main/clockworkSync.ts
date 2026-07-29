@@ -15,6 +15,12 @@ const activeMirrors = new Map<string, string>()
 // "logged automatically" checkmark.
 const unreliableTimerIds = new Set<string>()
 
+// timerId -> true once notifyTimerRunning has actually attempted to mirror it to Clockwork at least
+// once. A custom log is inserted directly as "paused" and never runs through notifyTimerRunning, so
+// without this a save would see "no active mirror" and wrongly read that as "already fully synced"
+// rather than "never synced at all" — this set is what tells the two apart.
+const engagedTimerIds = new Set<string>()
+
 function isSyncActive(): boolean {
   return getSettings().clockworkSyncEnabled && hasClockworkApiToken()
 }
@@ -30,6 +36,7 @@ export async function notifyTimerRunning(timerId: string, tagId: string | null):
   if (!isSyncActive()) return
   const issueKey = resolveIssueKey(tagId)
   if (!issueKey) return
+  engagedTimerIds.add(timerId)
   const ok = await startClockworkTimer(issueKey)
   if (ok) activeMirrors.set(issueKey, timerId)
   else unreliableTimerIds.add(timerId)
@@ -60,8 +67,9 @@ export async function notifyTimerSaved(timerId: string, tagId: string | null): P
     if (!ok) unreliableTimerIds.add(timerId)
   }
 
-  const reliable = !unreliableTimerIds.has(timerId)
+  const reliable = engagedTimerIds.has(timerId) && !unreliableTimerIds.has(timerId)
   unreliableTimerIds.delete(timerId)
+  engagedTimerIds.delete(timerId)
   return reliable
 }
 

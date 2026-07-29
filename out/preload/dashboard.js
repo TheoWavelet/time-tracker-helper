@@ -29,6 +29,7 @@ const api = {
     get: () => electron.ipcRenderer.invoke("settings:get"),
     setDockSide: (dockSide) => electron.ipcRenderer.invoke("settings:setDockSide", dockSide),
     setHighlightPausedTimers: (value) => electron.ipcRenderer.invoke("settings:setHighlightPausedTimers", value),
+    setHighlightNoTimers: (value) => electron.ipcRenderer.invoke("settings:setHighlightNoTimers", value),
     setBrowserDomainFilter: (value) => electron.ipcRenderer.invoke("settings:setBrowserDomainFilter", value),
     setClockworkSyncEnabled: (value) => electron.ipcRenderer.invoke("settings:setClockworkSyncEnabled", value),
     setDefaultLinkBrowser: (value) => electron.ipcRenderer.invoke("settings:setDefaultLinkBrowser", value),

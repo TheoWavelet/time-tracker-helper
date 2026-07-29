@@ -47,6 +47,8 @@ const api = {
     setDockSide: (dockSide: DockSide): Promise<AppSettings> => ipcRenderer.invoke('settings:setDockSide', dockSide),
     setHighlightPausedTimers: (value: boolean): Promise<AppSettings> =>
       ipcRenderer.invoke('settings:setHighlightPausedTimers', value),
+    setHighlightNoTimers: (value: boolean): Promise<AppSettings> =>
+      ipcRenderer.invoke('settings:setHighlightNoTimers', value),
     setBrowserDomainFilter: (value: string): Promise<AppSettings> =>
       ipcRenderer.invoke('settings:setBrowserDomainFilter', value),
     setClockworkSyncEnabled: (value: boolean): Promise<AppSettings> =>

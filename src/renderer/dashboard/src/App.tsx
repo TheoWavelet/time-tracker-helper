@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AppSettings, BrowserPairingInfo, ClockworkStatus, DockSide, LinkBrowser, TimersSnapshot } from '@shared/types'
 import { StartTimerForm, type StartTimerFormValue } from '../../components/TimerStarter'
 import { HistoryTimerRow, TimerRow } from '../../components/TimerRows'
-import { ChartIcon, ChromeIcon, EdgeIcon, GearIcon, ToastStack, TrashIcon, useToasts } from '../../components/ui'
+import { ChartIcon, EdgeIcon, GearIcon, OsDefaultIcon, ToastStack, TrashIcon, useToasts } from '../../components/ui'
 import { groupHistory } from './groupHistory'
 
 const PAIRING_POLL_INTERVAL_MS = 1500
@@ -133,6 +133,11 @@ export function App(): JSX.Element {
 
   async function handleToggleHighlightPaused(): Promise<void> {
     const updated = await window.api.settings.setHighlightPausedTimers(!settings?.highlightPausedTimers)
+    setSettings(updated)
+  }
+
+  async function handleToggleHighlightNoTimers(): Promise<void> {
+    const updated = await window.api.settings.setHighlightNoTimers(!settings?.highlightNoTimers)
     setSettings(updated)
   }
 
@@ -272,23 +277,50 @@ export function App(): JSX.Element {
             </button>
             {settingsOpen && (
             <div className="settings-popover">
-              <div className="settings-popover__group">
-                <span className="settings-popover__label">Overlay position</span>
-                <div className="dock-toggle">
-                  <button
-                    className={settings?.dockSide === 'left' ? 'is-selected' : ''}
-                    onClick={() => handleDockSideChange('left')}
-                  >
-                    Left
-                  </button>
-                  <button
-                    className={settings?.dockSide === 'right' ? 'is-selected' : ''}
-                    onClick={() => handleDockSideChange('right')}
-                  >
-                    Right
-                  </button>
+              <div className="settings-popover__row">
+                <div className="settings-popover__group">
+                  <span className="settings-popover__label">Overlay position</span>
+                  <div className="dock-toggle">
+                    <button
+                      className={settings?.dockSide === 'left' ? 'is-selected' : ''}
+                      onClick={() => handleDockSideChange('left')}
+                    >
+                      Left
+                    </button>
+                    <button
+                      className={settings?.dockSide === 'right' ? 'is-selected' : ''}
+                      onClick={() => handleDockSideChange('right')}
+                    >
+                      Right
+                    </button>
+                  </div>
+                </div>
+
+                <div className="settings-popover__group">
+                  <span className="settings-popover__label">Default link browser</span>
+                  <div className="link-browser-toggle">
+                    <button
+                      type="button"
+                      className={`link-browser-toggle__btn${settings?.defaultLinkBrowser === 'chrome' ? ' is-selected' : ''}`}
+                      onClick={() => handleSetDefaultLinkBrowser('chrome')}
+                      aria-label="OS default"
+                      title="Open links with the OS default browser"
+                    >
+                      <OsDefaultIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className={`link-browser-toggle__btn${settings?.defaultLinkBrowser === 'edge' ? ' is-selected' : ''}`}
+                      onClick={() => handleSetDefaultLinkBrowser('edge')}
+                      aria-label="Edge"
+                      title="Open links in Microsoft Edge"
+                    >
+                      <EdgeIcon />
+                    </button>
+                  </div>
                 </div>
               </div>
+
               <label className="setting-toggle">
                 <input
                   type="checkbox"
@@ -297,30 +329,14 @@ export function App(): JSX.Element {
                 />
                 Highlight when all timers are paused
               </label>
-
-              <div className="settings-popover__group">
-                <span className="settings-popover__label">Default link browser</span>
-                <div className="link-browser-toggle">
-                  <button
-                    type="button"
-                    className={`link-browser-toggle__btn${settings?.defaultLinkBrowser === 'chrome' ? ' is-selected' : ''}`}
-                    onClick={() => handleSetDefaultLinkBrowser('chrome')}
-                    aria-label="Chrome"
-                    title="Open links with the OS default browser"
-                  >
-                    <ChromeIcon />
-                  </button>
-                  <button
-                    type="button"
-                    className={`link-browser-toggle__btn${settings?.defaultLinkBrowser === 'edge' ? ' is-selected' : ''}`}
-                    onClick={() => handleSetDefaultLinkBrowser('edge')}
-                    aria-label="Edge"
-                    title="Open links in Microsoft Edge"
-                  >
-                    <EdgeIcon />
-                  </button>
-                </div>
-              </div>
+              <label className="setting-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings?.highlightNoTimers ?? false}
+                  onChange={handleToggleHighlightNoTimers}
+                />
+                Highlight overlay when no timers are running
+              </label>
 
               <div className="settings-popover__divider" />
 
