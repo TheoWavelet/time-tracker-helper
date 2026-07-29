@@ -4,3 +4,5 @@ release
 /*.zip
 /build
 /.tsbuild
+.tsbuild
+out
