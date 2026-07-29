@@ -1,4 +1,4 @@
-import { r as reactExports, u as useToasts, j as jsxRuntimeExports, T as ToastStack, C as ChartIcon, G as GearIcon, a as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-rZusqEBO.js";
+import { r as reactExports, u as useToasts, j as jsxRuntimeExports, T as ToastStack, C as ChartIcon, G as GearIcon, a as ChromeIcon, E as EdgeIcon, b as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-Bh0SnIHy.js";
 function startOfDay(timestamp) {
   const d = new Date(timestamp);
   d.setHours(0, 0, 0, 0);
@@ -103,6 +103,10 @@ function App() {
     const updated = await window.api.clockwork.setApiToken(clockworkTokenInput);
     setClockworkStatus(updated);
     setClockworkTokenInput("");
+    if (!settings?.clockworkSyncEnabled) {
+      const updatedSettings = await window.api.settings.setClockworkSyncEnabled(true);
+      setSettings(updatedSettings);
+    }
     pushToast("Saved Clockwork API token");
   }
   async function handleClearClockworkToken() {
@@ -112,6 +116,10 @@ function App() {
   }
   async function handleToggleClockworkSync() {
     const updated = await window.api.settings.setClockworkSyncEnabled(!settings?.clockworkSyncEnabled);
+    setSettings(updated);
+  }
+  async function handleSetDefaultLinkBrowser(value) {
+    const updated = await window.api.settings.setDefaultLinkBrowser(value);
     setSettings(updated);
   }
   async function commitDomainFilter() {
@@ -265,6 +273,33 @@ function App() {
               ),
               "Highlight when all timers are paused"
             ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-popover__group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "settings-popover__label", children: "Default link browser" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "link-browser-toggle", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: `link-browser-toggle__btn${settings?.defaultLinkBrowser === "chrome" ? " is-selected" : ""}`,
+                    onClick: () => handleSetDefaultLinkBrowser("chrome"),
+                    "aria-label": "Chrome",
+                    title: "Open links with the OS default browser",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(ChromeIcon, {})
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: `link-browser-toggle__btn${settings?.defaultLinkBrowser === "edge" ? " is-selected" : ""}`,
+                    onClick: () => handleSetDefaultLinkBrowser("edge"),
+                    "aria-label": "Edge",
+                    title: "Open links in Microsoft Edge",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(EdgeIcon, {})
+                  }
+                )
+              ] })
+            ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "settings-popover__divider" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "settings-popover__group", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "settings-popover__label", children: "Browser extension" }),
@@ -397,7 +432,8 @@ function App() {
           timer,
           onDelete: handleDeleteTimer,
           onToggleConfirmed: handleToggleConfirmed,
-          onLinkOpened: handleLinkOpened
+          onLinkOpened: handleLinkOpened,
+          defaultLinkBrowser: settings?.defaultLinkBrowser
         },
         timer.id
       ))
@@ -441,7 +477,8 @@ function App() {
           timer,
           onDelete: handleDeleteTimer,
           onToggleConfirmed: handleToggleConfirmed,
-          onLinkOpened: handleLinkOpened
+          onLinkOpened: handleLinkOpened,
+          defaultLinkBrowser: settings?.defaultLinkBrowser
         },
         timer.id
       ))
@@ -485,7 +522,8 @@ function App() {
           timer,
           onDelete: handleDeleteTimer,
           onToggleConfirmed: handleToggleConfirmed,
-          onLinkOpened: handleLinkOpened
+          onLinkOpened: handleLinkOpened,
+          defaultLinkBrowser: settings?.defaultLinkBrowser
         },
         timer.id
       ))

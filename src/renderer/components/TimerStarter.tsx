@@ -38,6 +38,9 @@ interface BrowserPickItem {
   key: string
   title: string
   url: string
+  /** Tab's lastAccessed, or history's lastVisitTime — a single unified field so open tabs and
+   *  history can be sorted together by actual recency instead of tabs-then-history en masse. */
+  recency: number
 }
 
 function sortTags(tags: TagPickerEntry[], view: PickerView): TagPickerEntry[] {
@@ -166,19 +169,23 @@ function TagPicker({ value, onChange, onPickTag, placeholder }: TagPickerProps):
   const visibleHistory = domainHistory.filter((item) => matchesQuery(query, item.title, item.url))
   const domainSuffix = domainFilter ? ` (${domainFilter})` : ''
 
-  // Open tabs first, then history — combined into one searchable, paginated list under "All".
+  // Open tabs and history merged into one searchable, paginated list under "All", sorted by
+  // actual recency across both rather than every open tab outranking all of history regardless
+  // of how long ago it was last touched.
   const allBrowserItems: BrowserPickItem[] = [
     ...visibleTabs.map((tab, index) => ({
       key: `tab-${tab.url}-${index}`,
       title: withIssueKeyPrefix(tab.title, tab.url),
-      url: tab.url
+      url: tab.url,
+      recency: tab.lastAccessed
     })),
     ...visibleHistory.map((item) => ({
       key: `history-${item.url}-${item.lastVisitTime}`,
       title: withIssueKeyPrefix(item.title, item.url),
-      url: item.url
+      url: item.url,
+      recency: item.lastVisitTime
     }))
-  ]
+  ].sort((first, second) => second.recency - first.recency)
   const visibleBrowserItems = allBrowserItems.slice(0, browserPageCount)
 
   useEffect(() => {

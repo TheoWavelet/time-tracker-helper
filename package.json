@@ -1,6 +1,6 @@
 {
   "name": "time-tracking-helper",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Personal time-tracking overlay app",
   "main": "./out/main/index.js",
   "author": {

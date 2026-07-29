@@ -32,12 +32,12 @@ export function startTimer(input: StartTimerInput): TimerDTO {
   const now = Date.now()
   const title = input.title?.trim() || formatDefaultTimerTitle(now)
 
-  let previousRunningTagId: string | null | undefined
+  let previousRunning: { id: string; tagId: string | null } | undefined
   const newId = sqlite.transaction(() => {
     const running = timersRepo.findRunningTimer()
     if (running) {
       timersRepo.pauseTimerRow(running.id, 'switched', title)
-      previousRunningTagId = running.tagId
+      previousRunning = { id: running.id, tagId: running.tagId }
     }
 
     const tagId = input.tagLabel?.trim() ? tagsRepo.findOrCreateTagByLabel(input.tagLabel).id : null
@@ -50,7 +50,7 @@ export function startTimer(input: StartTimerInput): TimerDTO {
   const created = timersRepo.findTimerById(newId)
   if (!created) throw new Error('Timer disappeared immediately after creation')
 
-  if (previousRunningTagId !== undefined) void clockworkSync.notifyTimerSegmentEnded(previousRunningTagId)
+  if (previousRunning) void clockworkSync.notifyTimerSegmentEnded(previousRunning.id, previousRunning.tagId)
   void clockworkSync.notifyTimerRunning(created.id, created.tagId)
 
   return created
@@ -87,7 +87,7 @@ export function pauseTimer(id: string): void {
   const timer = timersRepo.findTimerById(id)
   timersRepo.pauseTimerRow(id, 'manual', null)
   emitChange()
-  void clockworkSync.notifyTimerSegmentEnded(timer?.tagId ?? null)
+  void clockworkSync.notifyTimerSegmentEnded(id, timer?.tagId ?? null)
 }
 
 /** Auto-pause from idle detection, backdated to when activity actually stopped (see idleMonitor.ts). */
@@ -95,25 +95,25 @@ export function pauseTimerForIdle(id: string, endAt: number): void {
   const timer = timersRepo.findTimerById(id)
   timersRepo.pauseTimerRow(id, 'idle', null, endAt)
   emitChange()
-  void clockworkSync.notifyTimerSegmentEnded(timer?.tagId ?? null)
+  void clockworkSync.notifyTimerSegmentEnded(id, timer?.tagId ?? null)
 }
 
 export function resumeTimer(id: string): void {
   const sqlite = getRawSqlite()
-  let previousRunningTagId: string | null | undefined
+  let previousRunning: { id: string; tagId: string | null } | undefined
   const target = sqlite.transaction(() => {
     const running = timersRepo.findRunningTimer()
     const target = timersRepo.findTimerById(id)
     if (running && running.id !== id) {
       timersRepo.pauseTimerRow(running.id, 'switched', target?.title ?? null)
-      previousRunningTagId = running.tagId
+      previousRunning = { id: running.id, tagId: running.tagId }
     }
     timersRepo.resumeTimerRow(id)
     return target
   })()
   emitChange()
 
-  if (previousRunningTagId !== undefined) void clockworkSync.notifyTimerSegmentEnded(previousRunningTagId)
+  if (previousRunning) void clockworkSync.notifyTimerSegmentEnded(previousRunning.id, previousRunning.tagId)
   void clockworkSync.notifyTimerRunning(id, target?.tagId ?? null)
 }
 
@@ -126,7 +126,7 @@ export function stopTimer(id: string): void {
   emitChange()
 
   if (stopped) {
-    void clockworkSync.notifyTimerSaved(stopped.tagId).then((logged) => {
+    void clockworkSync.notifyTimerSaved(id, stopped.tagId).then((logged) => {
       if (logged) {
         timersRepo.markClockworkLogged(id)
         emitChange()

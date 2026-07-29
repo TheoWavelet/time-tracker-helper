@@ -109,6 +109,26 @@ export function ChartIcon(): JSX.Element {
   )
 }
 
+export function ChromeIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" fill="none" stroke="#EA4335" strokeWidth="4" strokeDasharray="12.57 25.13" strokeDashoffset="0" />
+      <circle cx="8" cy="8" r="6" fill="none" stroke="#FBBC05" strokeWidth="4" strokeDasharray="12.57 25.13" strokeDashoffset="-12.57" />
+      <circle cx="8" cy="8" r="6" fill="none" stroke="#34A853" strokeWidth="4" strokeDasharray="12.57 25.13" strokeDashoffset="-25.13" />
+      <circle cx="8" cy="8" r="3" fill="#4285F4" stroke="#fff" strokeWidth="1" />
+    </svg>
+  )
+}
+
+export function EdgeIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="6.5" cy="8" r="6" fill="#00B7C3" />
+      <circle cx="10" cy="7" r="5" fill="#0078D4" opacity="0.85" />
+    </svg>
+  )
+}
+
 export function GearIcon(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

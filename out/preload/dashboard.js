@@ -31,6 +31,7 @@ const api = {
     setHighlightPausedTimers: (value) => electron.ipcRenderer.invoke("settings:setHighlightPausedTimers", value),
     setBrowserDomainFilter: (value) => electron.ipcRenderer.invoke("settings:setBrowserDomainFilter", value),
     setClockworkSyncEnabled: (value) => electron.ipcRenderer.invoke("settings:setClockworkSyncEnabled", value),
+    setDefaultLinkBrowser: (value) => electron.ipcRenderer.invoke("settings:setDefaultLinkBrowser", value),
     onChanged: (callback) => {
       const listener = (_event, settings) => callback(settings);
       electron.ipcRenderer.on("settings:changed", listener);

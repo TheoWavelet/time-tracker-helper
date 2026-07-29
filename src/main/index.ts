@@ -22,6 +22,12 @@ function countActiveTimers(snapshot: TimersSnapshot): number {
   return snapshot.timers.filter((t) => t.status === 'running' || t.status === 'paused').length
 }
 
+// Works around a well-known Chromium/Windows quirk where a transparent, frameless BrowserWindow
+// (the overlay) briefly flashes its opaque backing surface during GPU-compositor redraws —
+// especially frequent here since hovering the collapsed bar and expand/collapse both animate its
+// bounds continuously. Must be called before app is ready / any window is created.
+app.disableHardwareAcceleration()
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
 if (!gotSingleInstanceLock) {

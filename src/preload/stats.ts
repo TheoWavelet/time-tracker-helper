@@ -1,9 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TimerDTO, TimersSnapshot, WeeklyStats } from '@shared/types'
+import type { AppSettings, TimerDTO, TimersSnapshot, WeeklyStats } from '@shared/types'
 
 const api = {
   stats: {
     getWeekly: (): Promise<WeeklyStats> => ipcRenderer.invoke('stats:getWeekly')
+  },
+  settings: {
+    get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get')
   },
   archive: {
     list: (): Promise<TimerDTO[]> => ipcRenderer.invoke('archive:list'),

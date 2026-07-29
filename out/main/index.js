@@ -82,12 +82,16 @@ ALTER TABLE tags ADD COLUMN clockwork_issue_key TEXT NULL;
 -- "logged automatically" indicator in history).
 ALTER TABLE timers ADD COLUMN clockwork_logged_at INTEGER NULL;
 `;
+const migration0006 = "-- Records which browser a tag's target_url was originally picked from (see\n-- tags.repo.ts / browserBridge.ts), so history can reopen the link in that same browser instead\n-- of always falling back to the OS default browser.\nALTER TABLE tags ADD COLUMN source_browser TEXT NULL;\n";
+const migration0007 = '-- Reverts 0006_tag_source_browser.sql — per-tag source-browser auto-detection was replaced by a\n-- single user-picked "default link browser" setting instead (see settingsStore.ts).\nALTER TABLE tags DROP COLUMN source_browser;\n';
 const MIGRATIONS = [
   { version: 1, sql: migration0001 },
   { version: 2, sql: migration0002 },
   { version: 3, sql: migration0003 },
   { version: 4, sql: migration0004 },
-  { version: 5, sql: migration0005 }
+  { version: 5, sql: migration0005 },
+  { version: 6, sql: migration0006 },
+  { version: 7, sql: migration0007 }
 ];
 let sqlite = null;
 let db = null;
@@ -260,25 +264,25 @@ function backfillClockworkIssueKeys() {
     }
   }
 }
-function mapRow(row, tagLabel, tagTargetUrl) {
-  return { ...row, tagLabel, tagTargetUrl };
-}
 const timerWithTag = { timer: timers, tagLabel: tags.label, tagTargetUrl: tags.targetUrl };
+function mapRow(row) {
+  return { ...row.timer, tagLabel: row.tagLabel, tagTargetUrl: row.tagTargetUrl };
+}
 function listTimers() {
   const rows = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.isNull(timers.archivedAt)).orderBy(drizzleOrm.desc(timers.startedAt)).all();
-  return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl));
+  return rows.map(mapRow);
 }
 function listArchivedTimers$1() {
   const rows = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.isNotNull(timers.archivedAt)).orderBy(drizzleOrm.desc(timers.archivedAt)).all();
-  return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl));
+  return rows.map(mapRow);
 }
 function findRunningTimer() {
   const row = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.eq(timers.status, "running")).get();
-  return row ? mapRow(row.timer, row.tagLabel, row.tagTargetUrl) : null;
+  return row ? mapRow(row) : null;
 }
 function findTimerById(id) {
   const row = getDb().select(timerWithTag).from(timers).leftJoin(tags, drizzleOrm.eq(tags.id, timers.tagId)).where(drizzleOrm.eq(timers.id, id)).get();
-  return row ? mapRow(row.timer, row.tagLabel, row.tagTargetUrl) : null;
+  return row ? mapRow(row) : null;
 }
 function insertTimer(input) {
   const now = Date.now();
@@ -476,7 +480,8 @@ const defaults = {
   browserDomainFilter: "atlassian.net",
   // Off by default even once a token is set — this pushes real time entries to a shared work
   // system, so it should be a deliberate opt-in rather than switching on the moment a token exists.
-  clockworkSyncEnabled: false
+  clockworkSyncEnabled: false,
+  defaultLinkBrowser: "chrome"
 };
 const store = new Store({ defaults });
 function getSettings() {
@@ -485,7 +490,8 @@ function getSettings() {
     dockYOffset: store.get("dockYOffset"),
     highlightPausedTimers: store.get("highlightPausedTimers"),
     browserDomainFilter: store.get("browserDomainFilter"),
-    clockworkSyncEnabled: store.get("clockworkSyncEnabled")
+    clockworkSyncEnabled: store.get("clockworkSyncEnabled"),
+    defaultLinkBrowser: store.get("defaultLinkBrowser")
   };
 }
 function setDockSide(dockSide) {
@@ -508,7 +514,12 @@ function setClockworkSyncEnabled(value) {
   store.set("clockworkSyncEnabled", value);
   return getSettings();
 }
+function setDefaultLinkBrowser(value) {
+  store.set("defaultLinkBrowser", value);
+  return getSettings();
+}
 const activeMirrors = /* @__PURE__ */ new Map();
+const unreliableTimerIds = /* @__PURE__ */ new Set();
 function isSyncActive() {
   return getSettings().clockworkSyncEnabled && hasClockworkApiToken();
 }
@@ -522,19 +533,27 @@ async function notifyTimerRunning(timerId, tagId) {
   if (!issueKey) return;
   const ok = await startClockworkTimer(issueKey);
   if (ok) activeMirrors.set(issueKey, timerId);
+  else unreliableTimerIds.add(timerId);
 }
-async function notifyTimerSegmentEnded(tagId) {
+async function notifyTimerSegmentEnded(timerId, tagId) {
   const issueKey = resolveIssueKey(tagId);
-  if (!issueKey || !activeMirrors.has(issueKey)) return;
+  if (!issueKey || activeMirrors.get(issueKey) !== timerId) return;
   activeMirrors.delete(issueKey);
-  await stopClockworkTimer(issueKey);
+  const ok = await stopClockworkTimer(issueKey);
+  if (!ok) unreliableTimerIds.add(timerId);
 }
-async function notifyTimerSaved(tagId) {
+async function notifyTimerSaved(timerId, tagId) {
   if (!isSyncActive()) return false;
   const issueKey = resolveIssueKey(tagId);
   if (!issueKey) return false;
-  activeMirrors.delete(issueKey);
-  return stopClockworkTimer(issueKey);
+  if (activeMirrors.get(issueKey) === timerId) {
+    activeMirrors.delete(issueKey);
+    const ok = await stopClockworkTimer(issueKey);
+    if (!ok) unreliableTimerIds.add(timerId);
+  }
+  const reliable = !unreliableTimerIds.has(timerId);
+  unreliableTimerIds.delete(timerId);
+  return reliable;
 }
 async function stopAllActiveMirrors() {
   const issueKeys = Array.from(activeMirrors.keys());
@@ -582,12 +601,12 @@ function startTimer(input) {
   const sqlite2 = getRawSqlite();
   const now = Date.now();
   const title = input.title?.trim() || formatDefaultTimerTitle(now);
-  let previousRunningTagId;
+  let previousRunning;
   const newId = sqlite2.transaction(() => {
     const running = findRunningTimer();
     if (running) {
       pauseTimerRow(running.id, "switched", title);
-      previousRunningTagId = running.tagId;
+      previousRunning = { id: running.id, tagId: running.tagId };
     }
     const tagId = input.tagLabel?.trim() ? findOrCreateTagByLabel(input.tagLabel).id : null;
     const id = node_crypto.randomUUID();
@@ -597,7 +616,7 @@ function startTimer(input) {
   emitChange();
   const created = findTimerById(newId);
   if (!created) throw new Error("Timer disappeared immediately after creation");
-  if (previousRunningTagId !== void 0) void notifyTimerSegmentEnded(previousRunningTagId);
+  if (previousRunning) void notifyTimerSegmentEnded(previousRunning.id, previousRunning.tagId);
   void notifyTimerRunning(created.id, created.tagId);
   return created;
 }
@@ -629,29 +648,29 @@ function pauseTimer(id) {
   const timer = findTimerById(id);
   pauseTimerRow(id, "manual", null);
   emitChange();
-  void notifyTimerSegmentEnded(timer?.tagId ?? null);
+  void notifyTimerSegmentEnded(id, timer?.tagId ?? null);
 }
 function pauseTimerForIdle(id, endAt) {
   const timer = findTimerById(id);
   pauseTimerRow(id, "idle", null, endAt);
   emitChange();
-  void notifyTimerSegmentEnded(timer?.tagId ?? null);
+  void notifyTimerSegmentEnded(id, timer?.tagId ?? null);
 }
 function resumeTimer(id) {
   const sqlite2 = getRawSqlite();
-  let previousRunningTagId;
+  let previousRunning;
   const target = sqlite2.transaction(() => {
     const running = findRunningTimer();
     const target2 = findTimerById(id);
     if (running && running.id !== id) {
       pauseTimerRow(running.id, "switched", target2?.title ?? null);
-      previousRunningTagId = running.tagId;
+      previousRunning = { id: running.id, tagId: running.tagId };
     }
     resumeTimerRow(id);
     return target2;
   })();
   emitChange();
-  if (previousRunningTagId !== void 0) void notifyTimerSegmentEnded(previousRunningTagId);
+  if (previousRunning) void notifyTimerSegmentEnded(previousRunning.id, previousRunning.tagId);
   void notifyTimerRunning(id, target?.tagId ?? null);
 }
 function stopTimer(id) {
@@ -662,7 +681,7 @@ function stopTimer(id) {
   }
   emitChange();
   if (stopped) {
-    void notifyTimerSaved(stopped.tagId).then((logged) => {
+    void notifyTimerSaved(id, stopped.tagId).then((logged) => {
       if (logged) {
         markClockworkLogged(id);
         emitChange();
@@ -735,10 +754,7 @@ function registerTimerIpc() {
 function registerTagsIpc() {
   electron.ipcMain.handle("tags:list", () => listTags());
   electron.ipcMain.handle("tags:listForPicker", () => listTagsForPicker());
-  electron.ipcMain.handle(
-    "tags:findOrCreateByLabelAndUrl",
-    (_event, label, url) => findOrCreateTagByLabelAndUrl(label, url)
-  );
+  electron.ipcMain.handle("tags:findOrCreateByLabelAndUrl", (_event, label, url) => findOrCreateTagByLabelAndUrl(label, url));
   electron.ipcMain.handle("tags:toggleFavorite", (_event, id) => toggleTagFavorite(id));
 }
 function broadcastSettings() {
@@ -767,6 +783,11 @@ function registerSettingsIpc(onDockSideChange) {
   });
   electron.ipcMain.handle("settings:setClockworkSyncEnabled", (_event, value) => {
     const updated = setClockworkSyncEnabled(value);
+    broadcastSettings();
+    return updated;
+  });
+  electron.ipcMain.handle("settings:setDefaultLinkBrowser", (_event, value) => {
+    const updated = setDefaultLinkBrowser(value);
     broadcastSettings();
     return updated;
   });
@@ -1209,6 +1230,7 @@ function startIdleMonitor() {
 function countActiveTimers(snapshot) {
   return snapshot.timers.filter((t) => t.status === "running" || t.status === "paused").length;
 }
+electron.app.disableHardwareAcceleration();
 const gotSingleInstanceLock = electron.app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   electron.app.quit();

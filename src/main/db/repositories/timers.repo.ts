@@ -3,11 +3,11 @@ import { getDb } from '../connection'
 import { tags, timers } from '../schema'
 import type { TimerDTO, TimerKind } from '@shared/types'
 
-function mapRow(row: typeof timers.$inferSelect, tagLabel: string | null, tagTargetUrl: string | null): TimerDTO {
-  return { ...row, tagLabel, tagTargetUrl }
-}
-
 const timerWithTag = { timer: timers, tagLabel: tags.label, tagTargetUrl: tags.targetUrl }
+
+function mapRow(row: { timer: typeof timers.$inferSelect; tagLabel: string | null; tagTargetUrl: string | null }): TimerDTO {
+  return { ...row.timer, tagLabel: row.tagLabel, tagTargetUrl: row.tagTargetUrl }
+}
 
 export function listTimers(): TimerDTO[] {
   // Ordered by startedAt (set once at creation, never touched by pause/resume/stop) rather than
@@ -19,7 +19,7 @@ export function listTimers(): TimerDTO[] {
     .where(isNull(timers.archivedAt))
     .orderBy(desc(timers.startedAt))
     .all()
-  return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl))
+  return rows.map(mapRow)
 }
 
 /** Timers deleted from history — soft-deleted, so they still exist here until the archive is cleared. */
@@ -31,7 +31,7 @@ export function listArchivedTimers(): TimerDTO[] {
     .where(isNotNull(timers.archivedAt))
     .orderBy(desc(timers.archivedAt))
     .all()
-  return rows.map((row) => mapRow(row.timer, row.tagLabel, row.tagTargetUrl))
+  return rows.map(mapRow)
 }
 
 export function findRunningTimer(): TimerDTO | null {
@@ -41,7 +41,7 @@ export function findRunningTimer(): TimerDTO | null {
     .leftJoin(tags, eq(tags.id, timers.tagId))
     .where(eq(timers.status, 'running'))
     .get()
-  return row ? mapRow(row.timer, row.tagLabel, row.tagTargetUrl) : null
+  return row ? mapRow(row) : null
 }
 
 export function findTimerById(id: string): TimerDTO | null {
@@ -51,7 +51,7 @@ export function findTimerById(id: string): TimerDTO | null {
     .leftJoin(tags, eq(tags.id, timers.tagId))
     .where(eq(timers.id, id))
     .get()
-  return row ? mapRow(row.timer, row.tagLabel, row.tagTargetUrl) : null
+  return row ? mapRow(row) : null
 }
 
 export interface InsertTimerInput {

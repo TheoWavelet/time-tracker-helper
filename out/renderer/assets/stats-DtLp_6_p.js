@@ -1,13 +1,15 @@
-import { r as reactExports, j as jsxRuntimeExports, k as formatDurationHuman, a as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-rZusqEBO.js";
+import { r as reactExports, j as jsxRuntimeExports, l as formatDurationHuman, b as TrashIcon, H as HistoryTimerRow, c as client, R as React } from "./TimerRows-Bh0SnIHy.js";
 function App() {
   const [weeklyStats, setWeeklyStats] = reactExports.useState(null);
   const [archived, setArchived] = reactExports.useState(null);
+  const [settings, setSettings] = reactExports.useState(null);
   function refetch() {
     window.api.stats.getWeekly().then(setWeeklyStats);
     window.api.archive.list().then(setArchived);
   }
   reactExports.useEffect(() => {
     refetch();
+    window.api.settings.get().then(setSettings);
     return window.api.timers.onChanged(refetch);
   }, []);
   async function handleClearArchive() {
@@ -56,7 +58,7 @@ function App() {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "app__section", children: [
       archived.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "app__empty", children: "Nothing deleted yet." }),
-      archived.map((timer) => /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryTimerRow, { timer }, timer.id))
+      archived.map((timer) => /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryTimerRow, { timer, defaultLinkBrowser: settings?.defaultLinkBrowser }, timer.id))
     ] })
   ] });
 }

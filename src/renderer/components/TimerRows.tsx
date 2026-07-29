@@ -1,4 +1,4 @@
-import type { TimerDTO } from '@shared/types'
+import type { LinkBrowser, TimerDTO } from '@shared/types'
 import { formatDurationHuman, formatElapsedClock } from '@shared/format'
 import { useElapsedMs, useStatusPulse } from './timerDisplay'
 import { CheckIcon, TrashIcon } from './ui'
@@ -21,6 +21,8 @@ interface HistoryTimerRowProps {
   /** Omitted entirely in contexts (like the overlay's "Just logged" list) that don't need it. */
   onToggleConfirmed?: (id: string) => void
   onLinkOpened?: (id: string) => void
+  /** Which browser to force-open the tag's link in — falls back to the OS default (undefined ~= "chrome"). */
+  defaultLinkBrowser?: LinkBrowser
 }
 
 function statusLabel(timer: TimerDTO): string {
@@ -103,7 +105,7 @@ export function TimerRow({
   )
 }
 
-export function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpened }: HistoryTimerRowProps): JSX.Element {
+export function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpened, defaultLinkBrowser }: HistoryTimerRowProps): JSX.Element {
   const isConfirmed = timer.loggedConfirmedAt != null
   const isVisited = timer.linkOpenedAt != null
 
@@ -112,7 +114,11 @@ export function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpen
   }
 
   function handleOpenTagLink(): void {
-    window.api.shell.openExternal(timer.tagTargetUrl!)
+    const url = timer.tagTargetUrl!
+    // Edge gets forced open via its microsoft-edge: deep-link scheme, since shell.openExternal
+    // otherwise just hands off to whatever the OS default browser happens to be. There's no
+    // equally reliable "open in Chrome specifically" scheme, so that option just uses the OS default.
+    window.api.shell.openExternal(defaultLinkBrowser === 'edge' ? `microsoft-edge:${url}` : url)
     onLinkOpened?.(timer.id)
   }
 

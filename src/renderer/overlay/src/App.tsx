@@ -10,6 +10,13 @@ import { isWindowDragInProgress, startWindowDrag } from './windowDrag'
 const COLLAPSE_DELAY_MS = 250
 const EXPAND_DELAY_MS = 300
 const NEW_TIMER_FLASH_MS = 1800
+// Widening the bar animates its bounds over ~140ms (see RESIZE_ANIMATION_MS in overlayWindow.ts),
+// and each intermediate setBounds() call during that animation can make Chromium fire a synthetic
+// mouseleave/mouseenter on whatever now sits under the (physically stationary) cursor — the same
+// mechanism windowDrag.ts already documents for dragging. Right at a docked edge this could cause
+// narrow→widen→narrow to retrigger itself in a loop. Debouncing just the narrow side absorbs a
+// spurious leave-then-immediate-enter pair without adding any perceptible delay to a real one.
+const BAR_NARROW_DELAY_MS = 180
 
 function BarRow({
   timer,
@@ -51,6 +58,7 @@ export function App(): JSX.Element {
   const [barWide, setBarWideState] = useState(false)
   const collapseTimerRef = useRef<number | undefined>(undefined)
   const expandTimerRef = useRef<number | undefined>(undefined)
+  const barNarrowTimerRef = useRef<number | undefined>(undefined)
   const [newTimerId, setNewTimerId] = useState<string | null>(null)
   const { toasts, pushToast } = useToasts()
 
@@ -64,6 +72,7 @@ export function App(): JSX.Element {
       offSettings()
       if (expandTimerRef.current != null) window.clearTimeout(expandTimerRef.current)
       if (collapseTimerRef.current != null) window.clearTimeout(collapseTimerRef.current)
+      if (barNarrowTimerRef.current != null) window.clearTimeout(barNarrowTimerRef.current)
     }
   }, [])
 
@@ -74,6 +83,7 @@ export function App(): JSX.Element {
       // The main process already resets its own barWide to false on collapse (so the window
       // itself resizes narrow) — but this renderer-side flag is separate state and was never
       // told to follow, so a stale `true` here renders titles against an already-narrow window.
+      cancelScheduledBarNarrow()
       setBarWideState(false)
     }
   }
@@ -127,19 +137,30 @@ export function App(): JSX.Element {
     else window.api.timers.resume(timer.id)
   }
 
+  function cancelScheduledBarNarrow(): void {
+    if (barNarrowTimerRef.current != null) {
+      window.clearTimeout(barNarrowTimerRef.current)
+      barNarrowTimerRef.current = undefined
+    }
+  }
+
   // Attached to the shared container (rows + "see more" arrow) rather than either child
   // individually — moving between the two never crosses the container's own boundary, so it
   // can't flicker narrow-then-wide the way two separate per-child hover pairs would.
   function handleBarContainerMouseEnter(): void {
     if (isWindowDragInProgress()) return
+    cancelScheduledBarNarrow()
     setBarWideState(true)
     window.api.overlay.setBarWide(true)
   }
 
   function handleBarContainerMouseLeave(): void {
     if (isWindowDragInProgress()) return
-    setBarWideState(false)
-    window.api.overlay.setBarWide(false)
+    cancelScheduledBarNarrow()
+    barNarrowTimerRef.current = window.setTimeout(() => {
+      setBarWideState(false)
+      window.api.overlay.setBarWide(false)
+    }, BAR_NARROW_DELAY_MS)
   }
 
   function handlePauseFromPanel(id: string): void {

@@ -1,4 +1,4 @@
-import { r as reactExports, f as formatDefaultTimerTitle, j as jsxRuntimeExports, P as PlusIcon, b as ClockPlusIcon, u as useToasts, d as ChevronDownIcon, T as ToastStack, L as LogsIcon, e as TimerRow, g as useElapsedMs, h as useStatusPulse, i as formatElapsedClock, c as client, R as React } from "./TimerRows-rZusqEBO.js";
+import { r as reactExports, f as formatDefaultTimerTitle, j as jsxRuntimeExports, P as PlusIcon, d as ClockPlusIcon, u as useToasts, e as ChevronDownIcon, T as ToastStack, L as LogsIcon, g as TimerRow, h as useElapsedMs, i as useStatusPulse, k as formatElapsedClock, c as client, R as React } from "./TimerRows-Bh0SnIHy.js";
 const BROWSER_PAGE_SIZE = 50;
 function sortTags(tags, view) {
   return [...tags].sort(
@@ -102,14 +102,16 @@ function TagPicker({ value, onChange, onPickTag, placeholder }) {
     ...visibleTabs.map((tab, index) => ({
       key: `tab-${tab.url}-${index}`,
       title: withIssueKeyPrefix(tab.title, tab.url),
-      url: tab.url
+      url: tab.url,
+      recency: tab.lastAccessed
     })),
     ...visibleHistory.map((item) => ({
       key: `history-${item.url}-${item.lastVisitTime}`,
       title: withIssueKeyPrefix(item.title, item.url),
-      url: item.url
+      url: item.url,
+      recency: item.lastVisitTime
     }))
-  ];
+  ].sort((first, second) => second.recency - first.recency);
   const visibleBrowserItems = allBrowserItems.slice(0, browserPageCount);
   reactExports.useEffect(() => {
     setBrowserPageCount(BROWSER_PAGE_SIZE);
@@ -327,6 +329,7 @@ function startWindowDrag(event, onClick) {
 const COLLAPSE_DELAY_MS = 250;
 const EXPAND_DELAY_MS = 300;
 const NEW_TIMER_FLASH_MS = 1800;
+const BAR_NARROW_DELAY_MS = 180;
 function BarRow({
   timer,
   onClick,
@@ -356,6 +359,7 @@ function App() {
   const [barWide, setBarWideState] = reactExports.useState(false);
   const collapseTimerRef = reactExports.useRef(void 0);
   const expandTimerRef = reactExports.useRef(void 0);
+  const barNarrowTimerRef = reactExports.useRef(void 0);
   const [newTimerId, setNewTimerId] = reactExports.useState(null);
   const { toasts, pushToast } = useToasts();
   reactExports.useEffect(() => {
@@ -368,12 +372,14 @@ function App() {
       offSettings();
       if (expandTimerRef.current != null) window.clearTimeout(expandTimerRef.current);
       if (collapseTimerRef.current != null) window.clearTimeout(collapseTimerRef.current);
+      if (barNarrowTimerRef.current != null) window.clearTimeout(barNarrowTimerRef.current);
     };
   }, []);
   async function toggleExpanded(next) {
     await window.api.overlay.setExpanded(next);
     setExpanded(next);
     if (!next) {
+      cancelScheduledBarNarrow();
       setBarWideState(false);
     }
   }
@@ -415,15 +421,25 @@ function App() {
     if (timer.status === "running") window.api.timers.pause(timer.id);
     else window.api.timers.resume(timer.id);
   }
+  function cancelScheduledBarNarrow() {
+    if (barNarrowTimerRef.current != null) {
+      window.clearTimeout(barNarrowTimerRef.current);
+      barNarrowTimerRef.current = void 0;
+    }
+  }
   function handleBarContainerMouseEnter() {
     if (isWindowDragInProgress()) return;
+    cancelScheduledBarNarrow();
     setBarWideState(true);
     window.api.overlay.setBarWide(true);
   }
   function handleBarContainerMouseLeave() {
     if (isWindowDragInProgress()) return;
-    setBarWideState(false);
-    window.api.overlay.setBarWide(false);
+    cancelScheduledBarNarrow();
+    barNarrowTimerRef.current = window.setTimeout(() => {
+      setBarWideState(false);
+      window.api.overlay.setBarWide(false);
+    }, BAR_NARROW_DELAY_MS);
   }
   function handlePauseFromPanel(id) {
     const timer = snapshot?.timers.find((t) => t.id === id);

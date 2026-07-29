@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AppSettings, BrowserPairingInfo, ClockworkStatus, DockSide, TimersSnapshot } from '@shared/types'
+import type { AppSettings, BrowserPairingInfo, ClockworkStatus, DockSide, LinkBrowser, TimersSnapshot } from '@shared/types'
 import { StartTimerForm, type StartTimerFormValue } from '../../components/TimerStarter'
 import { HistoryTimerRow, TimerRow } from '../../components/TimerRows'
-import { ChartIcon, GearIcon, ToastStack, TrashIcon, useToasts } from '../../components/ui'
+import { ChartIcon, ChromeIcon, EdgeIcon, GearIcon, ToastStack, TrashIcon, useToasts } from '../../components/ui'
 import { groupHistory } from './groupHistory'
 
 const PAIRING_POLL_INTERVAL_MS = 1500
@@ -95,6 +95,12 @@ export function App(): JSX.Element {
     const updated = await window.api.clockwork.setApiToken(clockworkTokenInput)
     setClockworkStatus(updated)
     setClockworkTokenInput('')
+    // Saving a token is already an explicit opt-in — flipping this on too avoids the easy-to-miss
+    // second step of having to separately go check "log automatically" afterward.
+    if (!settings?.clockworkSyncEnabled) {
+      const updatedSettings = await window.api.settings.setClockworkSyncEnabled(true)
+      setSettings(updatedSettings)
+    }
     pushToast('Saved Clockwork API token')
   }
 
@@ -106,6 +112,11 @@ export function App(): JSX.Element {
 
   async function handleToggleClockworkSync(): Promise<void> {
     const updated = await window.api.settings.setClockworkSyncEnabled(!settings?.clockworkSyncEnabled)
+    setSettings(updated)
+  }
+
+  async function handleSetDefaultLinkBrowser(value: LinkBrowser): Promise<void> {
+    const updated = await window.api.settings.setDefaultLinkBrowser(value)
     setSettings(updated)
   }
 
@@ -287,6 +298,30 @@ export function App(): JSX.Element {
                 Highlight when all timers are paused
               </label>
 
+              <div className="settings-popover__group">
+                <span className="settings-popover__label">Default link browser</span>
+                <div className="link-browser-toggle">
+                  <button
+                    type="button"
+                    className={`link-browser-toggle__btn${settings?.defaultLinkBrowser === 'chrome' ? ' is-selected' : ''}`}
+                    onClick={() => handleSetDefaultLinkBrowser('chrome')}
+                    aria-label="Chrome"
+                    title="Open links with the OS default browser"
+                  >
+                    <ChromeIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className={`link-browser-toggle__btn${settings?.defaultLinkBrowser === 'edge' ? ' is-selected' : ''}`}
+                    onClick={() => handleSetDefaultLinkBrowser('edge')}
+                    aria-label="Edge"
+                    title="Open links in Microsoft Edge"
+                  >
+                    <EdgeIcon />
+                  </button>
+                </div>
+              </div>
+
               <div className="settings-popover__divider" />
 
               <div className="settings-popover__group">
@@ -437,6 +472,7 @@ export function App(): JSX.Element {
             onDelete={handleDeleteTimer}
             onToggleConfirmed={handleToggleConfirmed}
             onLinkOpened={handleLinkOpened}
+            defaultLinkBrowser={settings?.defaultLinkBrowser}
           />
         ))}
       </section>
@@ -476,6 +512,7 @@ export function App(): JSX.Element {
             onDelete={handleDeleteTimer}
             onToggleConfirmed={handleToggleConfirmed}
             onLinkOpened={handleLinkOpened}
+            defaultLinkBrowser={settings?.defaultLinkBrowser}
           />
         ))}
       </section>
@@ -513,6 +550,7 @@ export function App(): JSX.Element {
             onDelete={handleDeleteTimer}
             onToggleConfirmed={handleToggleConfirmed}
             onLinkOpened={handleLinkOpened}
+            defaultLinkBrowser={settings?.defaultLinkBrowser}
           />
         ))}
       </section>

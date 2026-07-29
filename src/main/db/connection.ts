@@ -7,13 +7,17 @@ import migration0002 from './migrations/0002_allow_idle_paused_reason.sql?raw'
 import migration0003 from './migrations/0003_custom_log_kind_and_tracking.sql?raw'
 import migration0004 from './migrations/0004_archive_and_daily_stats.sql?raw'
 import migration0005 from './migrations/0005_clockwork_issue_key.sql?raw'
+import migration0006 from './migrations/0006_tag_source_browser.sql?raw'
+import migration0007 from './migrations/0007_drop_tag_source_browser.sql?raw'
 
 const MIGRATIONS: { version: number; sql: string }[] = [
   { version: 1, sql: migration0001 },
   { version: 2, sql: migration0002 },
   { version: 3, sql: migration0003 },
   { version: 4, sql: migration0004 },
-  { version: 5, sql: migration0005 }
+  { version: 5, sql: migration0005 },
+  { version: 6, sql: migration0006 },
+  { version: 7, sql: migration0007 }
 ]
 
 export type DrizzleDb = ReturnType<typeof drizzle>

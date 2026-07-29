@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { TimerDTO, WeeklyStats } from '@shared/types'
+import type { AppSettings, TimerDTO, WeeklyStats } from '@shared/types'
 import { formatDurationHuman } from '@shared/format'
 import { HistoryTimerRow } from '../../components/TimerRows'
 import { TrashIcon } from '../../components/ui'
@@ -7,6 +7,7 @@ import { TrashIcon } from '../../components/ui'
 export function App(): JSX.Element {
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null)
   const [archived, setArchived] = useState<TimerDTO[] | null>(null)
+  const [settings, setSettings] = useState<AppSettings | null>(null)
 
   function refetch(): void {
     window.api.stats.getWeekly().then(setWeeklyStats)
@@ -15,6 +16,7 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     refetch()
+    window.api.settings.get().then(setSettings)
     return window.api.timers.onChanged(refetch)
   }, [])
 
@@ -72,7 +74,7 @@ export function App(): JSX.Element {
       <section className="app__section">
         {archived.length === 0 && <p className="app__empty">Nothing deleted yet.</p>}
         {archived.map((timer) => (
-          <HistoryTimerRow key={timer.id} timer={timer} />
+          <HistoryTimerRow key={timer.id} timer={timer} defaultLinkBrowser={settings?.defaultLinkBrowser} />
         ))}
       </section>
     </div>

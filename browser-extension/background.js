@@ -56,22 +56,44 @@ async function handleMessage(raw) {
   const domain = (message.domain || '').trim().toLowerCase();
 
   if (message.type === 'listTabs') {
-    const tabs = await chrome.tabs.query({});
-    const matching = domain ? tabs.filter((tab) => tab.url && tab.url.toLowerCase().includes(domain)) : tabs;
-    reply(message.requestId, 'listTabs:result', {
-      tabs: matching.map((tab) => ({ title: tab.title || tab.url || 'Untitled', url: tab.url || '' })),
-    });
+    try {
+      const tabs = await chrome.tabs.query({});
+      const matching = domain ? tabs.filter((tab) => tab.url && tab.url.toLowerCase().includes(domain)) : tabs;
+      reply(message.requestId, 'listTabs:result', {
+        tabs: matching.map((tab) => ({
+          title: tab.title || tab.url || 'Untitled',
+          url: tab.url || '',
+          // Added to Chrome/Edge around v121 — falls back to 0 (sorts last) on older versions.
+          lastAccessed: tab.lastAccessed || 0,
+        })),
+      });
+    } catch (error) {
+      console.error('listTabs failed', error);
+      reply(message.requestId, 'listTabs:result', { tabs: [] });
+    }
     return;
   }
 
   if (message.type === 'searchHistoryByDomain') {
-    // Letting Chrome's own text search do the domain matching searches the whole history, not
-    // just the most recent N entries — the substring filter below is just a safety net on top.
-    const results = await chrome.history.search({ text: domain, maxResults: 200, startTime: 0 });
-    const items = results
-      .filter((item) => !domain || (item.url && item.url.toLowerCase().includes(domain)))
-      .map((item) => ({ title: item.title || item.url, url: item.url, lastVisitTime: item.lastVisitTime || 0 }));
-    reply(message.requestId, 'searchHistoryByDomain:result', { items });
+    try {
+      // Letting Chrome's own text search do the domain matching searches the whole history, not
+      // just the most recent N entries — the substring filter below is just a safety net on top.
+      const results = await chrome.history.search({ text: domain, maxResults: 200, startTime: 0 });
+      const items = results
+        .filter((item) => !domain || (item.url && item.url.toLowerCase().includes(domain)))
+        .map((item) => ({
+          title: item.title || item.url,
+          url: item.url,
+          lastVisitTime: item.lastVisitTime || 0,
+        }));
+      reply(message.requestId, 'searchHistoryByDomain:result', { items });
+    } catch (error) {
+      // If this throws, the app-side request would otherwise just silently time out with no way
+      // to tell "history is empty" apart from "the call failed" — logging it here at least makes
+      // it diagnosable via this extension's service-worker console in chrome://extensions.
+      console.error('searchHistoryByDomain failed', error);
+      reply(message.requestId, 'searchHistoryByDomain:result', { items: [] });
+    }
   }
 }
 

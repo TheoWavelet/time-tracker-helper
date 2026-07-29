@@ -71,6 +71,11 @@ export interface CustomTimerLogInput {
 
 export type DockSide = 'left' | 'right'
 
+/** Which browser history/tag links should force-open in. "chrome" just falls back to the OS
+ *  default (there's no universally reliable "open in Chrome specifically" URI scheme); "edge"
+ *  uses the microsoft-edge: deep-link scheme Windows registers for it. */
+export type LinkBrowser = 'chrome' | 'edge'
+
 export interface AppSettings {
   dockSide: DockSide
   /** Vertical pixel offset from the display's work-area top, for the dragged bar position. null = auto-centered. */
@@ -81,12 +86,16 @@ export interface AppSettings {
   browserDomainFilter: string
   /** Master on/off switch for the whole Clockwork integration — off by default even with a token set. */
   clockworkSyncEnabled: boolean
+  /** Which browser to force-open history/tag links in — a user-picked default, not auto-detected. */
+  defaultLinkBrowser: LinkBrowser
 }
 
-/** A currently-open Chrome tab, reported live by the paired browser extension, already domain-filtered. */
+/** A currently-open browser tab, reported live by the paired browser extension, already domain-filtered. */
 export interface OpenTabInfo {
   title: string
   url: string
+  /** Chrome/Edge ~v121+ only — 0 on older versions, which just sorts last rather than erroring. */
+  lastAccessed: number
 }
 
 /** A visited page matching the domain filter, reported by the paired browser extension. */

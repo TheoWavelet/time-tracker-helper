@@ -6,6 +6,7 @@ import type {
   CustomTimerLogInput,
   DockSide,
   DomainHistoryItem,
+  LinkBrowser,
   OpenTabInfo,
   StartTimerInput,
   TagDTO,
@@ -50,6 +51,8 @@ const api = {
       ipcRenderer.invoke('settings:setBrowserDomainFilter', value),
     setClockworkSyncEnabled: (value: boolean): Promise<AppSettings> =>
       ipcRenderer.invoke('settings:setClockworkSyncEnabled', value),
+    setDefaultLinkBrowser: (value: LinkBrowser): Promise<AppSettings> =>
+      ipcRenderer.invoke('settings:setDefaultLinkBrowser', value),
     onChanged: (callback: (settings: AppSettings) => void): (() => void) => {
       const listener = (_event: unknown, settings: AppSettings): void => callback(settings)
       ipcRenderer.on('settings:changed', listener)

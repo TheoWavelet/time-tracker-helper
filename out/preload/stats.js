@@ -4,6 +4,9 @@ const api = {
   stats: {
     getWeekly: () => electron.ipcRenderer.invoke("stats:getWeekly")
   },
+  settings: {
+    get: () => electron.ipcRenderer.invoke("settings:get")
+  },
   archive: {
     list: () => electron.ipcRenderer.invoke("archive:list"),
     clear: () => electron.ipcRenderer.invoke("archive:clear")

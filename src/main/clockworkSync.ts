@@ -9,6 +9,12 @@ import { hasClockworkApiToken } from './clockworkTokenStore'
 // redundant calls and as the safety-net list to flush on quit/sleep/lock.
 const activeMirrors = new Map<string, string>()
 
+// timerId -> true once a start/stop call for it has failed. A timer with no *live* mirror at save
+// time is normally "already fully logged" (its segments were closed out as they ended) — but not
+// if getting there involved a failure, which this catches so a broken sync doesn't still show the
+// "logged automatically" checkmark.
+const unreliableTimerIds = new Set<string>()
+
 function isSyncActive(): boolean {
   return getSettings().clockworkSyncEnabled && hasClockworkApiToken()
 }
@@ -26,27 +32,37 @@ export async function notifyTimerRunning(timerId: string, tagId: string | null):
   if (!issueKey) return
   const ok = await startClockworkTimer(issueKey)
   if (ok) activeMirrors.set(issueKey, timerId)
+  else unreliableTimerIds.add(timerId)
 }
 
 /** Call whenever a running segment ends WITHOUT it being the timer's final save — manual pause,
  *  idle auto-pause, or getting auto-paused because another timer started. */
-export async function notifyTimerSegmentEnded(tagId: string | null): Promise<void> {
+export async function notifyTimerSegmentEnded(timerId: string, tagId: string | null): Promise<void> {
   const issueKey = resolveIssueKey(tagId)
-  if (!issueKey || !activeMirrors.has(issueKey)) return
+  if (!issueKey || activeMirrors.get(issueKey) !== timerId) return
   activeMirrors.delete(issueKey)
-  await stopClockworkTimer(issueKey)
+  const ok = await stopClockworkTimer(issueKey)
+  if (!ok) unreliableTimerIds.add(timerId)
 }
 
-/** Call on final Stop/Save. Returns whether Clockwork confirmed the stop, so the caller can mark
- *  the timer as "logged automatically." */
-export async function notifyTimerSaved(tagId: string | null): Promise<boolean> {
+/** Call on final Stop/Save. Returns whether Clockwork's record for this timer is fully up to date,
+ *  so the caller can mark it "logged automatically." If the timer was already paused (its last
+ *  segment closed out via notifyTimerSegmentEnded), there's nothing live left to stop — that's a
+ *  success, not a failure, and calling stop_timer again would just fail since nothing is running. */
+export async function notifyTimerSaved(timerId: string, tagId: string | null): Promise<boolean> {
   if (!isSyncActive()) return false
   const issueKey = resolveIssueKey(tagId)
   if (!issueKey) return false
-  // Still send the stop even if we weren't tracking this issue as actively mirrored (e.g. sync
-  // was just turned on, or a safety net already flushed it) — keeps Clockwork's state consistent.
-  activeMirrors.delete(issueKey)
-  return stopClockworkTimer(issueKey)
+
+  if (activeMirrors.get(issueKey) === timerId) {
+    activeMirrors.delete(issueKey)
+    const ok = await stopClockworkTimer(issueKey)
+    if (!ok) unreliableTimerIds.add(timerId)
+  }
+
+  const reliable = !unreliableTimerIds.has(timerId)
+  unreliableTimerIds.delete(timerId)
+  return reliable
 }
 
 async function stopAllActiveMirrors(): Promise<void> {

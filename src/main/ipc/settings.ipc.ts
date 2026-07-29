@@ -3,10 +3,11 @@ import {
   getSettings,
   setBrowserDomainFilter,
   setClockworkSyncEnabled,
+  setDefaultLinkBrowser,
   setDockSide,
   setHighlightPausedTimers
 } from '../settingsStore'
-import type { DockSide } from '@shared/types'
+import type { DockSide, LinkBrowser } from '@shared/types'
 
 function broadcastSettings(): void {
   const settings = getSettings()
@@ -39,6 +40,12 @@ export function registerSettingsIpc(onDockSideChange: (dockSide: DockSide) => vo
 
   ipcMain.handle('settings:setClockworkSyncEnabled', (_event, value: boolean) => {
     const updated = setClockworkSyncEnabled(value)
+    broadcastSettings()
+    return updated
+  })
+
+  ipcMain.handle('settings:setDefaultLinkBrowser', (_event, value: LinkBrowser) => {
+    const updated = setDefaultLinkBrowser(value)
     broadcastSettings()
     return updated
   })

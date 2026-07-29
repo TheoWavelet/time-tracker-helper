@@ -7089,6 +7089,20 @@ function ChevronDownIcon() {
 function ChartIcon() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: "0 0 16 16", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M3 13V9M8 13V5M13 13V7" }) });
 }
+function ChromeIcon() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 16 16", width: "14", height: "14", "aria-hidden": "true", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "8", cy: "8", r: "6", fill: "none", stroke: "#EA4335", strokeWidth: "4", strokeDasharray: "12.57 25.13", strokeDashoffset: "0" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "8", cy: "8", r: "6", fill: "none", stroke: "#FBBC05", strokeWidth: "4", strokeDasharray: "12.57 25.13", strokeDashoffset: "-12.57" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "8", cy: "8", r: "6", fill: "none", stroke: "#34A853", strokeWidth: "4", strokeDasharray: "12.57 25.13", strokeDashoffset: "-25.13" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "8", cy: "8", r: "3", fill: "#4285F4", stroke: "#fff", strokeWidth: "1" })
+  ] });
+}
+function EdgeIcon() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 16 16", width: "14", height: "14", "aria-hidden": "true", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "6.5", cy: "8", r: "6", fill: "#00B7C3" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "10", cy: "7", r: "5", fill: "#0078D4", opacity: "0.85" })
+  ] });
+}
 function GearIcon() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }),
@@ -7164,14 +7178,15 @@ function TimerRow({
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timer-row__meta", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "timer-row__status", children: statusLabel(timer) }) })
   ] });
 }
-function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpened }) {
+function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpened, defaultLinkBrowser }) {
   const isConfirmed = timer.loggedConfirmedAt != null;
   const isVisited = timer.linkOpenedAt != null;
   function handleDelete() {
     onDelete?.(timer.id);
   }
   function handleOpenTagLink() {
-    window.api.shell.openExternal(timer.tagTargetUrl);
+    const url = timer.tagTargetUrl;
+    window.api.shell.openExternal(defaultLinkBrowser === "edge" ? `microsoft-edge:${url}` : url);
     onLinkOpened?.(timer.id);
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "history-row", children: [
@@ -7208,23 +7223,25 @@ function HistoryTimerRow({ timer, onDelete, onToggleConfirmed, onLinkOpened }) {
 }
 export {
   ChartIcon as C,
+  EdgeIcon as E,
   GearIcon as G,
   HistoryTimerRow as H,
   LogsIcon as L,
   PlusIcon as P,
   React as R,
   ToastStack as T,
-  TrashIcon as a,
-  ClockPlusIcon as b,
+  ChromeIcon as a,
+  TrashIcon as b,
   client as c,
-  ChevronDownIcon as d,
-  TimerRow as e,
+  ClockPlusIcon as d,
+  ChevronDownIcon as e,
   formatDefaultTimerTitle as f,
-  useElapsedMs as g,
-  useStatusPulse as h,
-  formatElapsedClock as i,
+  TimerRow as g,
+  useElapsedMs as h,
+  useStatusPulse as i,
   jsxRuntimeExports as j,
-  formatDurationHuman as k,
+  formatElapsedClock as k,
+  formatDurationHuman as l,
   reactExports as r,
   useToasts as u
 };

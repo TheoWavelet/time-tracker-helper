@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { AppSettings, DockSide } from '@shared/types'
+import type { AppSettings, DockSide, LinkBrowser } from '@shared/types'
 
 const defaults: AppSettings = {
   dockSide: 'right',
@@ -8,7 +8,8 @@ const defaults: AppSettings = {
   browserDomainFilter: 'atlassian.net',
   // Off by default even once a token is set — this pushes real time entries to a shared work
   // system, so it should be a deliberate opt-in rather than switching on the moment a token exists.
-  clockworkSyncEnabled: false
+  clockworkSyncEnabled: false,
+  defaultLinkBrowser: 'chrome'
 }
 
 const store = new Store<AppSettings>({ defaults })
@@ -19,7 +20,8 @@ export function getSettings(): AppSettings {
     dockYOffset: store.get('dockYOffset'),
     highlightPausedTimers: store.get('highlightPausedTimers'),
     browserDomainFilter: store.get('browserDomainFilter'),
-    clockworkSyncEnabled: store.get('clockworkSyncEnabled')
+    clockworkSyncEnabled: store.get('clockworkSyncEnabled'),
+    defaultLinkBrowser: store.get('defaultLinkBrowser')
   }
 }
 
@@ -45,5 +47,10 @@ export function setBrowserDomainFilter(value: string): AppSettings {
 
 export function setClockworkSyncEnabled(value: boolean): AppSettings {
   store.set('clockworkSyncEnabled', value)
+  return getSettings()
+}
+
+export function setDefaultLinkBrowser(value: LinkBrowser): AppSettings {
+  store.set('defaultLinkBrowser', value)
   return getSettings()
 }
